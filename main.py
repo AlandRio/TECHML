@@ -97,6 +97,18 @@ scaled_nums = scaler.fit_transform(merged_df[numeric_columns])
 scaled_num_df = pd.DataFrame(scaled_nums, columns=numeric_columns, index=merged_df.index)
 
 # Impute Strings
+vectorized_parts = []
+merged_df[string_columns] = merged_df[string_columns].fillna('')
+merged_df[string_columns] = merged_df[string_columns].astype(str)
+for col in string_columns:
+    vectorizer = TfidfVectorizer(max_features=500)
+    X = vectorizer.fit_transform(merged_df[col])
+
+    # Prefix the column names with the original column name
+    tfidf_df = pd.DataFrame(X.toarray(), columns=[f'{col}_{word}' for word in vectorizer.get_feature_names()])
+
+    vectorized_parts.append(tfidf_df)
+df_vectorized = pd.concat(vectorized_parts, axis=1)
 
 # Impute categoricals
 cat_imputer = SimpleImputer(strategy='constant', fill_value='Unknown')
