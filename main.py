@@ -120,7 +120,7 @@ encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
 encoded_cats = encoder.fit_transform(merged_df[categorical_columns])
 encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names(categorical_columns), index=merged_df.index)
 # Combine
-final_df = pd.concat([scaled_num_df, encoded_cat_df], axis=1)
+final_df = pd.concat([scaled_num_df, encoded_cat_df,df_vectorized], axis=1)
 print(final_df)
 
 X= final_df.copy()
