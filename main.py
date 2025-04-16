@@ -55,7 +55,7 @@ founders_agg = founders_df_cleaned.groupby("Companies").agg({
 merged_df = merged_df.merge(founders_agg, how='left', left_on='Acquiring Company', right_on='Companies')
 
 # merged_df.to_csv("accquir2ing3.csv", index=False)
-print(merged_df.columns)
+# print(merged_df.columns)
 merged_df['Year of acquisition announcement'] = merged_df['Year of acquisition announcement'].astype(int)
 merged_df['Deal announced on'] = pd.to_datetime(merged_df['Deal announced on'], errors='coerce')
 merged_df['acquisition_year'] = merged_df['Deal announced on'].dt.year
@@ -79,14 +79,14 @@ merged_df['Year of acquisition announcement'] = pd.to_numeric(merged_df['Year of
 merged_df.columns = [col.strip().lower().replace(' ', '_') for col in merged_df.columns]
 # Identify numerical and categorical columns
 numeric_columns = ["price", "number_of_employees_(year_of_last_update)", "total_funding_($)", "number_of_acquisitions", "year_founded_acquired", "founders_count", "acquisition_year", "acquisition_month", "year_of_acquisition_announcement", "ipo", "number_of_employees"]
-print(f"Numbers: {numeric_columns}")
+# print(f"Numbers: {numeric_columns}")
 categorical_columns = ['status','terms']
 dropped_columns = ['acquisitions_id', 'acquired_company', 'acquiring_company', 'acquisition_profile', 'news', 'news_link', 'acquiring_company_acquirer', 'crunchbase_profile', 'image', 'tagline','founders', 'board_members', 'address_(hq)','description', 'homepage', 'twitter', 'api', 'company', 'crunchbase_profile_acquired', 'image_acquired', 'tagline_acquired','address_(hq)_acquired','description_acquired', 'homepage_acquired', 'twitter_acquired', 'acquired_by', 'api_acquired', 'companies']
 merged_df.drop(dropped_columns, axis=1, inplace=True)
 
 string_columns = [col for col in merged_df.columns if col not in categorical_columns and col not in numeric_columns]
 
-print(f"strings: {string_columns}")
+# print(f"strings: {string_columns}")
 # -------------------------------
 # Handle missing values
 # -------------------------------
@@ -100,7 +100,7 @@ scaled_num_df = pd.DataFrame(scaled_nums, columns=numeric_columns, index=merged_
 
 # Impute Strings
 vectorized_parts = []
-print(string_columns)
+# print(string_columns)
 merged_df[string_columns] = merged_df[string_columns].fillna('')
 merged_df[string_columns] = merged_df[string_columns].astype(str)
 for col in string_columns:
@@ -121,11 +121,11 @@ encoded_cats = encoder.fit_transform(merged_df[categorical_columns])
 encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names(categorical_columns), index=merged_df.index)
 # Combine
 final_df = pd.concat([scaled_num_df, encoded_cat_df,df_vectorized], axis=1)
-print(final_df)
+# print(final_df)
 
 X= final_df.copy()
 X = X.drop('price', axis=1)
 Y= final_df['price']
 
-print(X)
-print(Y)
+# print(X)
+# print(Y)
