@@ -81,6 +81,8 @@ merged_df.columns = [col.strip().lower().replace(' ', '_') for col in merged_df.
 numeric_columns = ["price", "number_of_employees_(year_of_last_update)", "total_funding_($)", "number_of_acquisitions", "year_founded_acquired", "founders_count", "acquisition_year", "acquisition_month", "year_of_acquisition_announcement", "ipo", "number_of_employees"]
 print(f"Numbers: {numeric_columns}")
 categorical_columns = ['status','terms']
+dropped_columns = ['acquisitions_id', 'acquired_company', 'acquiring_company', 'acquisition_profile', 'news', 'news_link', 'acquiring_company_acquirer', 'crunchbase_profile', 'image', 'tagline','founders', 'board_members', 'address_(hq)','description', 'homepage', 'twitter', 'api', 'company', 'crunchbase_profile_acquired', 'image_acquired', 'tagline_acquired','address_(hq)_acquired','description_acquired', 'homepage_acquired', 'twitter_acquired', 'acquired_by', 'api_acquired', 'companies']
+merged_df.drop(dropped_columns, axis=1, inplace=True)
 
 string_columns = [col for col in merged_df.columns if col not in categorical_columns and col not in numeric_columns]
 
@@ -98,6 +100,7 @@ scaled_num_df = pd.DataFrame(scaled_nums, columns=numeric_columns, index=merged_
 
 # Impute Strings
 vectorized_parts = []
+print(string_columns)
 merged_df[string_columns] = merged_df[string_columns].fillna('')
 merged_df[string_columns] = merged_df[string_columns].astype(str)
 for col in string_columns:
@@ -119,6 +122,10 @@ encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names(ca
 # Combine
 final_df = pd.concat([scaled_num_df, encoded_cat_df], axis=1)
 print(final_df)
-useless_columns = ['']
 
-final_df.to_csv("accquir2222211ing2221.csv", index=False)
+X= final_df.copy()
+X = X.drop('price', axis=1)
+Y= final_df['price']
+
+print(X)
+print(Y)
