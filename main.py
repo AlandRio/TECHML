@@ -123,16 +123,13 @@ encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names(ca
 final_df = pd.concat([scaled_num_df, encoded_cat_df,df_vectorized], axis=1)
 # print(final_df)
 
+final_df['year_founded_acquired'] = pd.to_numeric(final_df['year_founded_acquired'], errors='coerce').astype(int)
 final_df['year_founded'] = pd.to_numeric(final_df['year_founded'], errors='coerce').astype(int)
-
 final_df['acquisition_year'] = pd.to_numeric(final_df['acquisition_year'], errors='coerce').astype(int)
 
 final_df['acquirer_age'] = final_df['acquisition_year'] - final_df['year_founded']
+final_df['acquired_age'] = final_df['acquisition_year'] - final_df['year_founded_acquired']
 
-if 'year_founded_acquired' in final_df.columns:
-    final_df['acquired_age'] = final_df['acquisition_year'] - pd.to_numeric(final_df['year_founded_acquired'], errors='coerce').fillna(0).astype(int)
-else:
-    final_df['acquired_age'] = np.nan
 
 def get_quarter(month):
     if pd.notnull(month):
@@ -140,20 +137,20 @@ def get_quarter(month):
     else:
         return np.nan
 
+
 final_df["acquisition_quarter"] = final_df["acquisition_month"].apply(get_quarter)
 
 final_df['funding_per_employee'] = final_df['total_funding_($)'] / (final_df['number_of_employees'] + 1e-6)
 
 final_df['acquisitions_per_year'] = final_df['number_of_acquisitions'] / (final_df['acquirer_age'] + 1e-6)
 
-quarter_encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+quarter_encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
 quarter_encoded = quarter_encoder.fit_transform(final_df[['acquisition_quarter']].fillna(0))
-quarter_df = pd.DataFrame(
-    quarter_encoded,
-    columns=[f'acquisition_quarter_{int(i)}' for i in quarter_encoder.categories_[0]],
-    index=final_df.index
-)
+quarter_df = pd.DataFrame(quarter_encoded,
+                          columns=[f'acquisition_quarter_{int(i)}' for i in quarter_encoder.categories_[0]],
+                          index=final_df.index)
 final_df = pd.concat([final_df, quarter_df], axis=1)
+
 
 X= final_df.copy()
 X = X.drop('price', axis=1)
