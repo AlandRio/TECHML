@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
@@ -82,10 +82,14 @@ merged_df['Year of acquisition announcement'] = pd.to_numeric(merged_df['Year of
 # Convert column names to lowercase and replace spaces with underscores
 merged_df.columns = [col.strip().lower().replace(' ', '_') for col in merged_df.columns]
 # Identify numerical and categorical columns
-numeric_columns = ["price", "number_of_employees_(year_of_last_update)", "total_funding_($)", "number_of_acquisitions", "year_founded_acquired", "founders_count", "acquisition_year", "acquisition_month", "year_of_acquisition_announcement", "ipo", "number_of_employees"]
+numeric_columns = ["price", "number_of_employees_(year_of_last_update)", "total_funding_($)", "number_of_acquisitions",
+                    "year_founded_acquired", "founders_count", "acquisition_year", "acquisition_month", "year_of_acquisition_announcement", "ipo", "number_of_employees", "year_founded"]
 # print(f"Numbers: {numeric_columns}")
 categorical_columns = ['status','terms']
-dropped_columns = ['acquisitions_id', 'acquired_company', 'acquiring_company', 'acquisition_profile', 'news', 'news_link', 'acquiring_company_acquirer', 'crunchbase_profile', 'image', 'tagline','founders', 'board_members', 'address_(hq)','description', 'homepage', 'twitter', 'api', 'company', 'crunchbase_profile_acquired', 'image_acquired', 'tagline_acquired','address_(hq)_acquired','description_acquired', 'homepage_acquired', 'twitter_acquired', 'acquired_by', 'api_acquired', 'companies']
+dropped_columns = ['acquisitions_id', 'acquired_company', 'acquiring_company', 'acquisition_profile', 'news', 'news_link',
+                    'acquiring_company_acquirer', 'crunchbase_profile', 'image', 'tagline','founders', 'board_members',
+                      'address_(hq)','description', 'homepage', 'twitter', 'api', 'company', 'crunchbase_profile_acquired', 'image_acquired',
+                        'tagline_acquired','address_(hq)_acquired','description_acquired', 'homepage_acquired', 'twitter_acquired', 'acquired_by', 'api_acquired', 'companies']
 merged_df.drop(dropped_columns, axis=1, inplace=True)
 
 string_columns = [col for col in merged_df.columns if col not in categorical_columns and col not in numeric_columns]
@@ -112,7 +116,7 @@ for col in string_columns:
     X = vectorizer.fit_transform(merged_df[col])
 
     # Prefix the column names with the original column name
-    tfidf_df = pd.DataFrame(X.toarray(), columns=[f'{col}_{word}' for word in vectorizer.get_feature_names()])
+    tfidf_df = pd.DataFrame(X.toarray(), columns=[f'{col}_{word}' for word in vectorizer.get_feature_names_out()])
 
     vectorized_parts.append(tfidf_df)
 df_vectorized = pd.concat(vectorized_parts, axis=1)
@@ -120,18 +124,18 @@ df_vectorized = pd.concat(vectorized_parts, axis=1)
 # Impute categoricals
 cat_imputer = SimpleImputer(strategy='constant', fill_value='Unknown')
 merged_df[categorical_columns] = cat_imputer.fit_transform(merged_df[categorical_columns])
-encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
 encoded_cats = encoder.fit_transform(merged_df[categorical_columns])
-encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names(categorical_columns), index=merged_df.index)
+encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names_out(categorical_columns), index=merged_df.index)
 # Combine
 final_df = pd.concat([scaled_num_df, encoded_cat_df,df_vectorized], axis=1)
 # print(final_df)
 
 final_df['year_founded_acquired'] = pd.to_numeric(final_df['year_founded_acquired'], errors='coerce').astype(int)
-final_df['year_founded'] = pd.to_numeric(final_df['year_founded'], errors='coerce').astype(int)
+# final_df['year_founded'] = pd.to_numeric(final_df['year_founded'], errors='coerce').astype(int)
 final_df['acquisition_year'] = pd.to_numeric(final_df['acquisition_year'], errors='coerce').astype(int)
 
-final_df['acquirer_age'] = final_df['acquisition_year'] - final_df['year_founded']
+# final_df['acquirer_age'] = final_df['acquisition_year'] - final_df['year_founded']
 final_df['acquired_age'] = final_df['acquisition_year'] - final_df['year_founded_acquired']
 
 
@@ -146,7 +150,7 @@ final_df["acquisition_quarter"] = final_df["acquisition_month"].apply(get_quarte
 
 final_df['funding_per_employee'] = final_df['total_funding_($)'] / (final_df['number_of_employees'] + 1e-6)
 
-final_df['acquisitions_per_year'] = final_df['number_of_acquisitions'] / (final_df['acquirer_age'] + 1e-6)
+# final_df['acquisitions_per_year'] = final_df['number_of_acquisitions'] / (final_df['acquirer_age'] + 1e-6)
 
 quarter_encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
 quarter_encoded = quarter_encoder.fit_transform(final_df[['acquisition_quarter']].fillna(0))
@@ -178,6 +182,26 @@ print("Linear Regression:")
 print("MSE:", mean_squared_error(y_test, y_pred_lr))
 print("R² Score:", r2_score(y_test, y_pred_lr))
 
+print(".." * 10)
+
+# Create polynomial features (change degree as needed)
+poly = PolynomialFeatures(degree=2)
+X_train_poly = poly.fit_transform(X_train)
+X_test_poly = poly.transform(X_test)
+
+# Train the model
+model = LinearRegression()
+model.fit(X_train_poly, y_train)
+
+# Predict
+y_pred = model.predict(X_test_poly)
+
+# Evaluate
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+print("Polynomial Regression:")
+print("Mean Squared Error:", mse)
+print("R² Score:", r2)
 
 # Optional: Visualization
 plt.figure(figsize=(8, 5))
@@ -189,5 +213,3 @@ plt.title("Linear Regression: Actual vs. Predicted")
 plt.grid(True)
 plt.tight_layout()
 plt.show()
-
-print(".." * 10)
