@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from scipy.stats import zscore
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures
@@ -10,7 +9,6 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.feature_selection import VarianceThreshold
 import matplotlib.pyplot as plt
 from sklearn.feature_selection import SelectKBest, f_regression
-from sklearn.pipeline import make_pipeline
 
 # Read the CSV files
 acquisitions_df = pd.read_csv("Acquisitions.csv")
@@ -112,7 +110,6 @@ zero_columns = ['Total Funding ($)', 'Number of Acquisitions', 'founders_count']
 for column in zero_columns:
     merged_df[column] = merged_df[column].fillna(0)
 
-
 # Convert column names to lowercase and replace spaces with underscores
 merged_df.columns = [col.strip().lower().replace(' ', '_') for col in merged_df.columns]
 dropped_columns = ['acquisitions_id', 'acquired_company', 'acquiring_company', 'acquisition_profile', 'news',
@@ -160,7 +157,7 @@ numeric_columns = ["price", "number_of_employees_(year_of_last_update)", "total_
 categorical_columns = ['status', 'terms']
 
 string_columns = [col for col in merged_df.columns if col not in categorical_columns and col not in numeric_columns]
-print(f"All columns= {numeric_columns,categorical_columns,string_columns}")
+print(f"All columns= {numeric_columns, categorical_columns, string_columns}")
 # Impute numericals
 num_imputer = SimpleImputer(strategy='median')
 merged_df[numeric_columns] = num_imputer.fit_transform(merged_df[numeric_columns])
@@ -255,8 +252,8 @@ lr = LinearRegression()
 lr.fit(X_train_selected, y_train_log)
 
 # Evaluation
-y_pred_lr_log  = lr.predict(X_test_selected)
-y_pred_lr =  np.expm1(y_pred_lr_log)
+y_pred_lr_log = lr.predict(X_test_selected)
+y_pred_lr = np.expm1(y_pred_lr_log)
 
 print("Linear Regression:")
 print("MSE:", mean_squared_error(y_test, y_pred_lr))
@@ -283,7 +280,6 @@ r2 = r2_score(y_test, y_pred)
 print("Polynomial Regression:")
 print("Mean Squared Error:", mse)
 print("R² Score:", r2)
-
 
 residuals_lr = y_test - y_pred_lr
 residuals_poly = y_test - y_pred
