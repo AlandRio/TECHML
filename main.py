@@ -331,3 +331,59 @@ plt.legend()
 plt.grid(True)
 plt.tight_layout()
 plt.show()
+
+
+
+rf = RandomForestRegressor(n_estimators=100, random_state=42)
+rf.fit(X_train, y_train)
+y_pred_rf = rf.predict(X_test)
+
+# Model 2: XGBoost
+xgb_model = xgb.XGBRegressor(objective ='reg:squarederror', n_estimators=100, random_state=42)
+xgb_model.fit(X_train, y_train)
+y_pred_xgb = xgb_model.predict(X_test)
+
+# Model 3: Ridge Regression
+ridge_model = Ridge(alpha=1.0)
+ridge_model.fit(X_train, y_train)
+y_pred_ridge = ridge_model.predict(X_test)
+
+
+# Hyperparameter tuning using GridSearchCV for RandomForest
+param_grid = {'n_estimators': [100, 200], 'max_depth': [None, 10, 20]}
+grid_search_rf = GridSearchCV(estimator=rf, param_grid=param_grid, cv=3, scoring='neg_mean_squared_error', n_jobs=-1)
+grid_search_rf.fit(X_train, y_train)
+print(f"Best params for RandomForest: {grid_search_rf.best_params_}")
+
+# Create Stacking Model (Ensemble of RandomForest, XGBoost, Ridge)
+estimators = [
+    ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
+    ('xgb', xgb.XGBRegressor(objective='reg:squarederror', n_estimators=100, random_state=42)),
+    ('ridge', Ridge(alpha=1.0))
+]
+
+stacking_model = StackingRegressor(estimators=estimators, final_estimator=Ridge())
+stacking_model.fit(X_train, y_train)
+y_pred_stacking = stacking_model.predict(X_test)
+
+
+# Evaluate models
+print(f"RandomForest MSE: {mean_squared_error(y_test, y_pred_rf)}, R2: {r2_score(y_test, y_pred_rf)}")
+print(f"XGBoost MSE: {mean_squared_error(y_test, y_pred_xgb)}, R2: {r2_score(y_test, y_pred_xgb)}")
+print(f"Ridge MSE: {mean_squared_error(y_test, y_pred_ridge)}, R2: {r2_score(y_test, y_pred_ridge)}")
+print(f"Stacking Model MSE: {mean_squared_error(y_test, y_pred_stacking)}, R2: {r2_score(y_test, y_pred_stacking)}")
+
+# Visualizing Predictions
+plt.figure(figsize=(12, 7))
+plt.scatter(y_test, y_pred_rf, c='blue', label='RandomForest')
+plt.scatter(y_test, y_pred_xgb, c='green', label='XGBoost')
+plt.scatter(y_test, y_pred_ridge, c='red', label='Ridge')
+plt.scatter(y_test, y_pred_stacking, c='purple', label='Stacking')
+
+plt.xlabel("Actual Price")
+plt.ylabel("Predicted Price")
+plt.title("Model Comparison")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
