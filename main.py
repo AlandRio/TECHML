@@ -2,20 +2,19 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
+from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.feature_selection import VarianceThreshold
 import matplotlib.pyplot as plt
-from sklearn.feature_selection import SelectKBest, f_regression
 from sklearn.feature_selection import SelectKBest, f_regression
 from sklearn.ensemble import RandomForestRegressor, StackingRegressor
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error, r2_score
 import xgboost as xgb
-import matplotlib.pyplot as plt
+from sklearn.multioutput import MultiOutputRegressor
 
 # Read the CSV files
 acquisitions_df = pd.read_csv("Acquisitions.csv")
@@ -119,7 +118,7 @@ for column in zero_columns:
 
 # Convert column names to lowercase and replace spaces with underscores
 merged_df.columns = [col.strip().lower().replace(' ', '_') for col in merged_df.columns]
-dropped_columns = ['acquisitions_id', 'acquired_company', 'acquiring_company', 'acquisition_profile', 'news',
+dropped_columns = ['acquisitions_id', 'acquisition_profile', 'news',
                    'news_link', 'crunchbase_profile', 'image', 'tagline', 'founders', 'board_members',
                    'address_(hq)', 'description', 'homepage', 'twitter', 'api',
                    'crunchbase_profile_acquired', 'image_acquired',
@@ -129,11 +128,9 @@ merged_df.drop(dropped_columns, axis=1, inplace=True)
 
 # print(f"strings: {string_columns}")
 # -------------------------------
-# Handle missing values
+# feature engineering
 # -------------------------------
 
-
-# feature engineering
 merged_df['year_founded_acquired'] = pd.to_numeric(merged_df['year_founded_acquired'], errors='coerce').astype(int)
 merged_df['year_founded'] = pd.to_numeric(merged_df['year_founded'], errors='coerce').astype(int)
 merged_df['acquisition_year'] = pd.to_numeric(merged_df['acquisition_year'], errors='coerce').astype(int)
@@ -249,7 +246,7 @@ y_train_log = np.log1p(y_train)
 y_test_log = np.log1p(y_test)
 
 # Step 1: Feature Selection
-selector = SelectKBest(score_func=f_regression, k=250)  # Try 250 top features (adjust k if you want)
+selector = SelectKBest(score_func=f_regression, k=43)  # Try 250 top features (adjust k if you want)
 X_train_selected = selector.fit_transform(X_train, y_train_log)
 X_test_selected = selector.transform(X_test)
 
@@ -270,8 +267,8 @@ print(".." * 10)
 
 # Create polynomial features (change degree as needed)
 poly = PolynomialFeatures(degree=2)
-X_train_poly = poly.fit_transform(X_train)
-X_test_poly = poly.transform(X_test)
+X_train_poly = poly.fit_transform(X_train_selected)
+X_test_poly = poly.transform(X_test_selected)
 
 # Train the model
 model = LinearRegression()
@@ -343,12 +340,12 @@ plt.show()
 
 
 # Step 1: General Feature Selection (for first models) - you can set k=10 or any reasonable value
-selector_general = SelectKBest(score_func=f_regression, k=10)
+selector_general = SelectKBest(score_func=f_regression, k=40)
 X_train_selected = selector_general.fit_transform(X_train, y_train)
 X_test_selected = selector_general.transform(X_test)
 
 # Model 1: Random Forest
-rf = RandomForestRegressor(n_estimators=100, random_state=42)
+rf = RandomForestRegressor(n_estimators=100, random_state=44)
 rf.fit(X_train_selected, y_train)
 y_pred_rf = rf.predict(X_test_selected)
 
@@ -358,9 +355,13 @@ xgb_model.fit(X_train_selected, y_train)
 y_pred_xgb = xgb_model.predict(X_test_selected)
 
 # Model 3: Ridge Regression
+selector_ridge = SelectKBest(score_func=f_regression, k=100)
+X_train_selected_ridge = selector_ridge.fit_transform(X_train, y_train)
+X_test_selected_ridge = selector_ridge.transform(X_test)
+
 ridge_model = Ridge(alpha=1.0)
-ridge_model.fit(X_train_selected, y_train)
-y_pred_ridge = ridge_model.predict(X_test_selected)
+ridge_model.fit(X_train_selected_ridge, y_train)
+y_pred_ridge = ridge_model.predict(X_test_selected_ridge)
 
 # Step 2: Hyperparameter tuning for RandomForest
 param_grid = {'n_estimators': [100, 200], 'max_depth': [None, 10, 20]}
@@ -373,10 +374,14 @@ selector_stacking = SelectKBest(score_func=f_regression, k=200)
 X_train_selected_stacking = selector_stacking.fit_transform(X_train, y_train)
 X_test_selected_stacking = selector_stacking.transform(X_test)
 
+poly_regressor = make_pipeline(
+    PolynomialFeatures(degree=2),  # You can adjust the degree of the polynomial here
+    LinearRegression()
+)
 estimators = [
     ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
-    ('xgb', xgb.XGBRegressor(objective='reg:squarederror', n_estimators=100, random_state=42)),
-    ('ridge', Ridge(alpha=1.0))
+    ('ridge', Ridge(alpha=1.0)),
+    ('linear', LinearRegression())
 ]
 
 stacking_model = StackingRegressor(estimators=estimators, final_estimator=Ridge())
