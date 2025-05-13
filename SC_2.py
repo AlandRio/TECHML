@@ -21,6 +21,7 @@ acquisitions_df = pd.read_csv("Acquisitions.csv")
 acquiring_df = pd.read_csv("Acquiring Tech Companies.csv")
 acquired_df = pd.read_csv("Acquired Tech Companies.csv")
 founders_df = pd.read_csv("Founders and Board Members.csv")
+acquisition_class_df = pd.read_csv("Acquisitions class.csv")
 
 # Merge datasets on Acquisitions ID
 acquiring_df_cleaned = acquiring_df.copy()
@@ -30,7 +31,7 @@ acquiring_df_cleaned["Acquisitions ID"] = acquiring_df_cleaned["Acquisitions ID"
 # Remove whitespace from each company name
 acquiring_df_cleaned = acquiring_df_cleaned.explode("Acquisitions ID")
 acquiring_df_cleaned["Acquisitions ID"] = acquiring_df_cleaned["Acquisitions ID"].str.strip()
-
+acquisitions_df["deal size"] = acquisition_class_df["Deal size class"]
 merged_df = acquisitions_df.merge(
     acquiring_df_cleaned,
     how='left',
@@ -125,7 +126,6 @@ dropped_columns = ['acquisitions_id', 'acquisition_profile', 'news',
                    'tagline_acquired', 'address_(hq)_acquired', 'description_acquired', 'homepage_acquired',
                    'twitter_acquired', 'api_acquired']
 merged_df.drop(dropped_columns, axis=1, inplace=True)
-
 # print(f"strings: {string_columns}")
 # -------------------------------
 # feature engineering
@@ -153,14 +153,14 @@ merged_df['funding_per_employee'] = merged_df['total_funding_($)'] / (merged_df[
 merged_df['acquisitions_per_year'] = merged_df['number_of_acquisitions'] / (merged_df['acquirer_age'] + 1e-6)
 
 # Identify numerical and categorical columns
-numeric_columns = ["price", "number_of_employees_(year_of_last_update)", "total_funding_($)", "number_of_acquisitions",
+numeric_columns = ["price","number_of_employees_(year_of_last_update)", "total_funding_($)", "number_of_acquisitions",
                    "year_founded_acquired", "founders_count", "acquisition_year", "acquisition_month",
                    "year_of_acquisition_announcement", "ipo", "number_of_employees", "year_founded", 'acquired_age',
                    "acquisition_quarter", 'funding_per_employee', 'acquisitions_per_year']
 # print(f"Numbers: {numeric_columns}")
 categorical_columns = ['status', 'terms']
 
-string_columns = [col for col in merged_df.columns if col not in categorical_columns and col not in numeric_columns]
+string_columns = [col for col in merged_df.columns if col not in categorical_columns and col not in numeric_columns and col not in ["deal_size"]]
 print(f"All columns= {numeric_columns, categorical_columns, string_columns}")
 # Impute numericals
 num_imputer = SimpleImputer(strategy='median')
@@ -192,7 +192,7 @@ encoded_cats = encoder.fit_transform(merged_df[categorical_columns])
 encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names_out(categorical_columns),
                               index=merged_df.index)
 # Combine
-final_df = pd.concat([scaled_num_df, encoded_cat_df, df_vectorized], axis=1)
+final_df = pd.concat([scaled_num_df, encoded_cat_df, df_vectorized,merged_df["deal_size"]], axis=1)
 # print(final_df)
 
 
@@ -224,15 +224,18 @@ drop_columns = list(set(drop_columns))  # To avoid dropping the same column mult
 # Final feature selection after variance and covariance filtering
 final_selected_features = [col for col in selected_features if col not in drop_columns]
 
-X = final_df.copy()
-Y = final_df['price']
-X = X.drop('price', axis=1)
+X_regress = final_df.copy()
+Y_regress = final_df['price']
+X_regress = X_regress.drop(['price', 'deal_size'], axis=1)
+X_class = final_df.copy()
+Y_class = final_df['deal_size']
+X_class = X_class.drop(['price', 'deal_size'], axis=1)
 # print(X)
 # print(Y)
 
 # Split the data
 
-X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X_regress, Y_regress, test_size=0.2, random_state=42)
 # Remove price outliers
 q_low = y_train.quantile(0.01)
 q_high = y_train.quantile(0.99)
