@@ -9,6 +9,8 @@ from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_regressi
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
 
 
+class_flag = False
+
 # Function to get acquisition quarter
 def get_quarter(month):
     if pd.notnull(month):
@@ -28,6 +30,9 @@ def load_and_merge_data(acquisitions_file, acquiring_file, acquired_file, founde
             acquisition_class_df = pd.read_csv(acquisition_class_file)
         else:
             acquisitions_df['deal_size'] = np.nan
+
+        if class_flag:
+            acquisitions_df['Price'] = np.nan
 
         acquiring_df_cleaned = acquiring_df.copy()
         acquiring_df_cleaned["Acquisitions ID"] = acquiring_df_cleaned["Acquisitions ID"].str.split(",")
@@ -209,75 +214,77 @@ def run_all_models(final_df):
         metrics = {}
 
         # Regression models
-        regression_models = [
-            ('linear_regression', selector_regression, lambda x: np.expm1(x)),
-            ('polynomial_regression', selector_regression, lambda x: np.expm1(x), poly),
-            ('random_forest_regressor', selector_general, lambda x: x),
-            ('xgboost_regressor', selector_general, lambda x: x),
-            ('ridge_regression', selector_ridge, lambda x: x),
-            ('best_random_forest_regressor', selector_general, lambda x: x),
-            ('stacking_regressor', selector_stacking, lambda x: x)
-        ]
-        print("\n=== REGRESSION MODELS ===")
-        print(f"{'Model':<30} {'MSE':<10} {'R²':<10}")
-        print("-" * 50)
-        for model_name, selector, transform, *extra in regression_models:
-            try:
+        if not class_flag:
+            regression_models = [
+                ('linear_regression', selector_regression, lambda x: np.expm1(x)),
+                ('polynomial_regression', selector_regression, lambda x: np.expm1(x), poly),
+                ('random_forest_regressor', selector_general, lambda x: x),
+                ('xgboost_regressor', selector_general, lambda x: x),
+                ('ridge_regression', selector_ridge, lambda x: x),
+                ('best_random_forest_regressor', selector_general, lambda x: x),
+                ('stacking_regressor', selector_stacking, lambda x: x)
+            ]
+            print("\n=== REGRESSION MODELS ===")
+            print(f"{'Model':<30} {'MSE':<10} {'R²':<10}")
+            print("-" * 50)
+            for model_name, selector, transform, *extra in regression_models:
+                try:
 
-                model = pickle.load(open(f'saved_models/{model_name}.pkl', 'rb'))
-                X_selected = selector.transform(X_regress)
-                if extra:
-                    X_selected = extra[0].transform(X_selected)
-                pred = transform(model.predict(X_selected))
-                predictions[f'{model_name}_Price'] = pred
-                mse = mean_squared_error(y_regress, pred)
-                r2 = r2_score(y_regress, pred)
-                metrics[model_name] = {'MSE': mse, 'R²': r2}
-                print(f"{model_name:<30} {mse:.4f}     {r2:.4f}")
-            except FileNotFoundError:
-                print(f"Error: Model {model_name}.pkl not found")
-            except Exception as e:
-                print(f"Error running {model_name}: {e}")
+                    model = pickle.load(open(f'saved_models/{model_name}.pkl', 'rb'))
+                    X_selected = selector.transform(X_regress)
+                    if extra:
+                        X_selected = extra[0].transform(X_selected)
+                    pred = transform(model.predict(X_selected))
+                    predictions[f'{model_name}_Price'] = pred
+                    mse = mean_squared_error(y_regress, pred)
+                    r2 = r2_score(y_regress, pred)
+                    metrics[model_name] = {'MSE': mse, 'R²': r2}
+                    print(f"{model_name:<30} {mse:.4f}     {r2:.4f}")
+                except FileNotFoundError:
+                    print(f"Error: Model {model_name}.pkl not found")
+                except Exception as e:
+                    print(f"Error running {model_name}: {e}")
 
         # Classification models
-        classification_models = [
-            'best_logistic_regression',
-            'best_linear_svm',
-            'best_poly_svm',
-            'best_knn',
-            'best_decision_tree',
-            'best_random_forest_classifier',
-            'stacking_classifier',
-            'voting_classifier'
-        ]
-        print("\n=== CLASSIFICATION MODELS ===")
-        print(f"{'Model':<30} {'Accuracy':<10}")
-        print("-" * 50)
-        for model_name in classification_models:
-            try:
+        if class_flag:
+            classification_models = [
+                'best_logistic_regression',
+                'best_linear_svm',
+                'best_poly_svm',
+                'best_knn',
+                'best_decision_tree',
+                'best_random_forest_classifier',
+                'stacking_classifier',
+                'voting_classifier'
+            ]
+            print("\n=== CLASSIFICATION MODELS ===")
+            print(f"{'Model':<30} {'Accuracy':<10}")
+            print("-" * 50)
+            for model_name in classification_models:
+                try:
 
-                model = pickle.load(open(f'saved_models/{model_name}.pkl', 'rb'))
-                X_selected = cls_selector.transform(X_class)
-                pred_encoded = model.predict(X_selected)
-                pred = label_encoder.inverse_transform(pred_encoded)
-                predictions[f'{model_name}_Deal_Size'] = pred
-                if y_class is not None and not y_class.isna().all():
-                    valid_indices = y_class.notna()
-                    y_class_valid = y_class[valid_indices]
-                    pred_encoded_valid = pred_encoded[valid_indices]
-                    if len(y_class_valid) > 0:
-                        y_class_encoded = label_encoder.transform(y_class_valid)
-                        accuracy = accuracy_score(y_class_encoded, pred_encoded_valid)
-                        metrics[model_name] = {'Accuracy': accuracy}
-                        print(f"{model_name:<30} {accuracy:.4f}")
+                    model = pickle.load(open(f'saved_models/{model_name}.pkl', 'rb'))
+                    X_selected = cls_selector.transform(X_class)
+                    pred_encoded = model.predict(X_selected)
+                    pred = label_encoder.inverse_transform(pred_encoded)
+                    predictions[f'{model_name}_Deal_Size'] = pred
+                    if y_class is not None and not y_class.isna().all():
+                        valid_indices = y_class.notna()
+                        y_class_valid = y_class[valid_indices]
+                        pred_encoded_valid = pred_encoded[valid_indices]
+                        if len(y_class_valid) > 0:
+                            y_class_encoded = label_encoder.transform(y_class_valid)
+                            accuracy = accuracy_score(y_class_encoded, pred_encoded_valid)
+                            metrics[model_name] = {'Accuracy': accuracy}
+                            print(f"{model_name:<30} {accuracy:.4f}")
+                        else:
+                            print(f"No non-null deal_size values for {model_name}, skipping metrics")
                     else:
-                        print(f"No non-null deal_size values for {model_name}, skipping metrics")
-                else:
-                    print(f"No valid deal_size ground truth for {model_name}, skipping metrics")
-            except FileNotFoundError:
-                print(f"Error: Model {model_name}.pkl not found")
-            except Exception as e:
-                print(f"Error running {model_name}: {e}")
+                        print(f"No valid deal_size ground truth for {model_name}, skipping metrics")
+                except FileNotFoundError:
+                    print(f"Error: Model {model_name}.pkl not found")
+                except Exception as e:
+                    print(f"Error running {model_name}: {e}")
 
         # Save predictions
         predictions_df = pd.DataFrame(predictions)
@@ -314,9 +321,9 @@ def make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_
 
 
 if __name__ == "__main__":
-    acquisitions_file = "Acquisitions.csv"
+    acquisitions_file = "Acquisitions Class.csv"
     acquiring_file = "Acquiring Tech Companies.csv"
     acquired_file = "Acquired Tech Companies.csv"
     founders_file = "Founders and Board Members.csv"
-    acquisition_class_file = "Acquisitions class.csv"
-    make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_file, acquisition_class_file)
+    class_flag = True
+    make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_file,acquisitions_file)
