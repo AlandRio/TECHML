@@ -7,7 +7,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures, LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.feature_selection import VarianceThreshold
+from sklearn.feature_selection import VarianceThreshold, f_classif
 import matplotlib.pyplot as plt
 from sklearn.feature_selection import SelectKBest, f_regression
 from sklearn.ensemble import RandomForestRegressor, StackingRegressor, RandomForestClassifier, StackingClassifier, \
@@ -424,8 +424,12 @@ X_train, X_test, y_train, y_test = train_test_split(X_class, Y_class_encoded, te
 
 models = []
 
+selector = SelectKBest(score_func=f_classif, k=175)
+X_train = selector.fit_transform(X_train, y_train)
+X_test = selector.transform(X_test)
+
 best_accuracy = 0
-best_param_lr = 0
+best_model_lr = None
 
 print("\n--- Logistic Regression ---")
 for C in [0.01, 1, 100]:
@@ -434,11 +438,12 @@ for C in [0.01, 1, 100]:
     acc = accuracy_score(y_test, model.predict(X_test))
     if acc > best_accuracy:
         best_accuracy = acc
-        best_param_lr = C
+        best_model_lr = model
     print(f"C={C} -> Accuracy: {acc:.4f}")
 
 best_accuracy = 0
-best_param_lsvm = 0
+best_model_lsvm = None
+
 print("\n--- Linear SVM ---")
 for C in [0.01, 1, 100]:
     model = SVC(kernel='linear', C=C, probability=True)
@@ -446,11 +451,11 @@ for C in [0.01, 1, 100]:
     acc = accuracy_score(y_test, model.predict(X_test))
     if acc > best_accuracy:
         best_accuracy = acc
-        best_param_lsvm = C
+        best_model_lsvm = model
     print(f"C={C} -> Accuracy: {acc:.4f}")
 
 best_accuracy = 0
-best_param_psvm = 0
+best_model_psvm = None
 
 print("\n--- Poly SVM ---")
 for degree in [2, 3, 5]:
@@ -459,11 +464,12 @@ for degree in [2, 3, 5]:
     acc = accuracy_score(y_test, model.predict(X_test))
     if acc > best_accuracy:
         best_accuracy = acc
-        best_param_psvm = C
+        best_model_psvm = model
     print(f"Degree={degree} -> Accuracy: {acc:.4f}")
 
 best_accuracy = 0
-best_param_knn = 0
+best_model_knn = None
+
 print("\n--- KNN ---")
 for k in [3, 5, 11]:
     model = KNeighborsClassifier(n_neighbors=k)
@@ -471,11 +477,11 @@ for k in [3, 5, 11]:
     acc = accuracy_score(y_test, model.predict(X_test))
     if acc > best_accuracy:
         best_accuracy = acc
-        best_param_knn = C
+        best_model_knn = model
     print(f"n_neighbors={k} -> Accuracy: {acc:.4f}")
 
 best_accuracy = 0
-best_param_dt = 0
+best_model_dt = None
 
 print("\n--- Decision Tree ---")
 for depth in [3, 5, 10]:
@@ -484,11 +490,12 @@ for depth in [3, 5, 10]:
     acc = accuracy_score(y_test, model.predict(X_test))
     if acc > best_accuracy:
         best_accuracy = acc
-        best_param_dt = C
+        best_model_dt = model
     print(f"max_depth={depth} -> Accuracy: {acc:.4f}")
 
 best_accuracy = 0
-best_param_rf = 0
+best_model_rf = None
+
 print("\n--- Random Forest ---")
 for n in [50, 100, 200]:
     model = RandomForestClassifier(n_estimators=n, random_state=42)
@@ -496,16 +503,16 @@ for n in [50, 100, 200]:
     acc = accuracy_score(y_test, model.predict(X_test))
     if acc > best_accuracy:
         best_accuracy = acc
-        best_param_rf = C
+        best_model_rf = model
     print(f"n_estimators={n} -> Accuracy: {acc:.4f}")
 
 models = {
-    "Logistic Regression": LogisticRegression(max_iter=1000,C=best_param_lr),
-    "Linear SVM": SVC(kernel='linear', probability=True,C=best_param_lsvm),
-    "Poly SVM": SVC(kernel='poly', degree=best_param_psvm,probability=True),
-    "KNN": KNeighborsClassifier(n_neighbors=best_param_knn),
-    "Decision Tree": DecisionTreeClassifier(random_state=42, max_depth=best_param_dt),
-    "Random Forest": RandomForestClassifier(random_state=42,n_estimators=best_param_rf)
+    "Logistic Regression": best_model_lr,
+    "Linear SVM": best_model_lsvm,
+    "Poly SVM": best_model_psvm,
+    "KNN": best_model_knn,
+    "Decision Tree": best_model_dt,
+    "Random Forest": best_model_rf
 }
 
 # Stacking Ensemble (Logistic Regression as final estimator)
