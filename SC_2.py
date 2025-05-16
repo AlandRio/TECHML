@@ -2,19 +2,23 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures, LabelEncoder
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.feature_selection import VarianceThreshold
 import matplotlib.pyplot as plt
 from sklearn.feature_selection import SelectKBest, f_regression
-from sklearn.ensemble import RandomForestRegressor, StackingRegressor
+from sklearn.ensemble import RandomForestRegressor, StackingRegressor, RandomForestClassifier
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
 import xgboost as xgb
 from sklearn.multioutput import MultiOutputRegressor
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from xgboost import XGBClassifier
 
 # Read the CSV files
 acquisitions_df = pd.read_csv("Acquisitions.csv")
@@ -419,8 +423,12 @@ X_train, X_test, y_train, y_test = train_test_split(X_class, Y_class_encoded, te
 
 models = {
     "Logistic Regression": LogisticRegression(max_iter=1000),
-    "SVM": SVC(kernel='linear'),
-    "Decision Tree": DecisionTreeClassifier(random_state=42)
+    "Linear SVM": SVC(kernel='linear'),
+    "Poly SVM": SVC(kernel='poly', degree=3),
+    "KNN": KNeighborsClassifier(n_neighbors=5),
+    "Decision Tree": DecisionTreeClassifier(random_state=42),
+    "Random Forest": RandomForestClassifier(random_state=42),
+    "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric='logloss')
 }
 
 for name, model in models.items():
