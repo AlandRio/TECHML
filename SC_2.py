@@ -1,25 +1,27 @@
 import numpy as np
 import pandas as pd
+import pickle
+import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures, LabelEncoder
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.feature_selection import VarianceThreshold, f_classif
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
+from sklearn.feature_selection import VarianceThreshold, f_classif, SelectKBest, f_regression
 import matplotlib.pyplot as plt
-from sklearn.feature_selection import SelectKBest, f_regression
 from sklearn.ensemble import RandomForestRegressor, StackingRegressor, RandomForestClassifier, StackingClassifier, \
     VotingClassifier
-from sklearn.linear_model import Ridge
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
 import xgboost as xgb
-from sklearn.multioutput import MultiOutputRegressor
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from xgboost import XGBClassifier
+
+# Create directory for saved models and preprocessors
+os.makedirs('saved_models', exist_ok=True)
+os.makedirs('saved_preprocessors', exist_ok=True)
 
 # Read the CSV files
 acquisitions_df = pd.read_csv("Acquisitions.csv")
@@ -51,6 +53,7 @@ merged_df = merged_df.merge(
     on='Acquisitions ID',
     suffixes=('', '_Acquired')
 )
+
 # Assume founders_df is your original founders file
 founders_df_cleaned = founders_df.copy()
 
@@ -64,14 +67,10 @@ founders_df_cleaned["Companies"] = founders_df_cleaned["Companies"].str.strip()
 founders_agg = founders_df_cleaned.groupby("Companies").agg({
     "Name": "count"
 }).rename(columns={"Name": "founders_count"}).reset_index()
-# ---------------------------
-# 5. Merge Founders Info with Main Dataset
-# ---------------------------
+
 # Merge for acquiring company
 merged_df = merged_df.merge(founders_agg, how='left', left_on='Acquiring Company', right_on='Companies')
 
-# merged_df.to_csv("accquir2ing3.csv", index=False)
-# print(merged_df.columns)
 merged_df['Year of acquisition announcement'] = merged_df['Year of acquisition announcement'].astype(int)
 merged_df['Deal announced on'] = pd.to_datetime(merged_df['Deal announced on'], errors='coerce')
 merged_df['acquisition_year'] = merged_df['Deal announced on'].dt.year
@@ -82,45 +81,69 @@ duplicate_columns = ['Acquiring Company_Acquirer', 'Acquired by', 'Acquiring Com
                      'Company', 'Companies']
 merged_df.drop(columns=duplicate_columns, inplace=True)
 
+# Clean up numeric columns
 merged_df['Price'] = merged_df['Price'].replace(r'[\$,]', '', regex=True).astype(float)
 merged_df['Total Funding ($)'] = merged_df['Total Funding ($)'].replace(r'[\$,]', '', regex=True).astype(float)
 merged_df['Number of Employees'] = merged_df['Number of Employees'].fillna(0).replace(r'[\,]', '', regex=True).astype(
     int)
-mean_value = merged_df['Number of Employees'][merged_df['Number of Employees'] != 0].mean()
-merged_df['Number of Employees'].replace(0, mean_value)
 merged_df['Year Founded'] = pd.to_numeric(merged_df['Year Founded'], errors='coerce').fillna(0).astype(int)
 merged_df['IPO'] = pd.to_numeric(merged_df['IPO'], errors='coerce').fillna(0).astype(int)
 merged_df['Year of acquisition announcement'] = pd.to_numeric(merged_df['Year of acquisition announcement'],
                                                               errors='coerce').fillna(0).astype(int)
 
-# Filling NaN Values
-# Mode Columns
+# Store original data for later reference
+pickle.dump(merged_df, open('saved_preprocessors/original_data.pkl', 'wb'))
+
+# Calculate values for imputation and store them
 mode_columns = ['Number of Employees (year of last update)', 'acquisition_year', 'acquisition_month']
-for column in mode_columns:
-    mode_value = merged_df[column].mode()[0]
-    merged_df[column] = merged_df[column].fillna(mode_value)
-# Mean Columns
-mean_columns = ['Year Founded', 'IPO', 'Number of Employees', 'Year Founded_Acquired', 'Year Founded_Acquired']
-for column in mean_columns:
-    mean_value = merged_df[column][merged_df[column] != 0].mean()
-    merged_df[column] = merged_df[column].fillna(mean_value)
-    merged_df[column] = merged_df[column].replace(0, mean_value).astype(int)
-# Empty Columns
-empty_columns = ['Founders', 'Board Members', 'Acquired Companies', ]
-for column in empty_columns:
-    merged_df[column] = merged_df[column].fillna("")
-# Nothing Columns
-nothing_columns = ['News', 'News Link', 'CrunchBase Profile', 'Image', 'Tagline', 'Market Categories', 'Address (HQ)',
-                   'City (HQ)', 'State / Region (HQ)', 'Country (HQ)', 'Description', 'Homepage', 'Twitter', 'API',
-                   'CrunchBase Profile_Acquired', 'Image_Acquired', 'Tagline_Acquired', 'Market Categories_Acquired',
-                   'Address (HQ)_Acquired', 'City (HQ)_Acquired', 'State / Region (HQ)_Acquired',
-                   'Country (HQ)_Acquired', 'Description_Acquired', 'Homepage_Acquired', 'Twitter_Acquired']
-for column in nothing_columns:
-    merged_df[column] = merged_df[column].fillna("Nothing")
-# Zero Columns
+mode_fill_values = {col: merged_df[col].mode()[0] for col in mode_columns}
+
+mean_columns = ['Year Founded', 'IPO', 'Number of Employees', 'Year Founded_Acquired']
+mean_fill_values = {}
+for col in mean_columns:
+    mean_val = merged_df.loc[merged_df[col] != 0, col].mean()
+    mean_fill_values[col] = mean_val
+
 zero_columns = ['Total Funding ($)', 'Number of Acquisitions', 'founders_count']
-for column in zero_columns:
-    merged_df[column] = merged_df[column].fillna(0)
+
+fill_values = {
+    'mode': mode_fill_values,
+    'mean': mean_fill_values,
+    'zero': zero_columns,
+    'empty_string': ['Founders', 'Board Members', 'Acquired Companies'],
+    'nothing_string': [
+        'News', 'News Link', 'CrunchBase Profile', 'Image', 'Tagline', 'Market Categories', 'Address (HQ)',
+        'City (HQ)', 'State / Region (HQ)', 'Country (HQ)', 'Description', 'Homepage', 'Twitter', 'API',
+        'CrunchBase Profile_Acquired', 'Image_Acquired', 'Tagline_Acquired', 'Market Categories_Acquired',
+        'Address (HQ)_Acquired', 'City (HQ)_Acquired', 'State / Region (HQ)_Acquired',
+        'Country (HQ)_Acquired', 'Description_Acquired', 'Homepage_Acquired', 'Twitter_Acquired'
+    ]
+}
+
+# Save to a pickle file
+with open('saved_preprocessors/polynomial_transformer.pkl', 'wb') as f:
+    pickle.dump(fill_values, f)
+
+# Mode fill
+for col, val in fill_values['mode'].items():
+    merged_df[col].fillna(val, inplace=True)
+
+# Mean fill + replace zeros with mean
+for col, val in fill_values['mean'].items():
+    merged_df[col] = merged_df[col].replace(0, val).fillna(val).astype(int)
+
+# Zero fill
+for col in fill_values['zero']:
+    merged_df[col].fillna(0, inplace=True)
+
+    # Empty string fill
+for col in fill_values['empty_string']:
+    merged_df[col].fillna("", inplace=True)
+
+# "Nothing" fill
+for col in fill_values['nothing_string']:
+    merged_df[col].fillna("Nothing", inplace=True)
+
 
 # Convert column names to lowercase and replace spaces with underscores
 merged_df.columns = [col.strip().lower().replace(' ', '_') for col in merged_df.columns]
@@ -131,11 +154,8 @@ dropped_columns = ['acquisitions_id', 'acquisition_profile', 'news',
                    'tagline_acquired', 'address_(hq)_acquired', 'description_acquired', 'homepage_acquired',
                    'twitter_acquired', 'api_acquired']
 merged_df.drop(dropped_columns, axis=1, inplace=True)
-# print(f"strings: {string_columns}")
-# -------------------------------
-# feature engineering
-# -------------------------------
 
+# Feature engineering
 merged_df['year_founded_acquired'] = pd.to_numeric(merged_df['year_founded_acquired'], errors='coerce').astype(int)
 merged_df['year_founded'] = pd.to_numeric(merged_df['year_founded'], errors='coerce').astype(int)
 merged_df['acquisition_year'] = pd.to_numeric(merged_df['acquisition_year'], errors='coerce').astype(int)
@@ -152,62 +172,94 @@ def get_quarter(month):
 
 
 merged_df["acquisition_quarter"] = merged_df["acquisition_month"].apply(get_quarter)
-
 merged_df['funding_per_employee'] = merged_df['total_funding_($)'] / (merged_df['number_of_employees'] + 1e-6)
-
 merged_df['acquisitions_per_year'] = merged_df['number_of_acquisitions'] / (merged_df['acquirer_age'] + 1e-6)
 
+# Save the feature engineered dataframe
+pickle.dump(merged_df, open('saved_preprocessors/feature_engineered_data.pkl', 'wb'))
+
 # Identify numerical and categorical columns
-numeric_columns = ["price","number_of_employees_(year_of_last_update)", "total_funding_($)", "number_of_acquisitions",
+numeric_columns = ["price", "number_of_employees_(year_of_last_update)", "total_funding_($)", "number_of_acquisitions",
                    "year_founded_acquired", "founders_count", "acquisition_year", "acquisition_month",
                    "year_of_acquisition_announcement", "ipo", "number_of_employees", "year_founded", 'acquired_age',
                    "acquisition_quarter", 'funding_per_employee', 'acquisitions_per_year']
-# print(f"Numbers: {numeric_columns}")
+
 categorical_columns = ['status', 'terms']
 
-string_columns = [col for col in merged_df.columns if col not in categorical_columns and col not in numeric_columns and col not in ["deal_size"]]
+string_columns = [col for col in merged_df.columns if
+                  col not in categorical_columns and col not in numeric_columns and col not in ["deal_size"]]
 print(f"All columns= {numeric_columns, categorical_columns, string_columns}")
+
+# Save column categories
+column_categories = {
+    'numeric_columns': numeric_columns,
+    'categorical_columns': categorical_columns,
+    'string_columns': string_columns
+}
+pickle.dump(column_categories, open('saved_preprocessors/column_categories.pkl', 'wb'))
+
 # Impute numericals
 num_imputer = SimpleImputer(strategy='median')
-merged_df[numeric_columns] = num_imputer.fit_transform(merged_df[numeric_columns])
-scaler = StandardScaler()
-scaled_nums = scaler.fit_transform(merged_df[numeric_columns])
-scaled_num_df = pd.DataFrame(scaled_nums, columns=numeric_columns, index=merged_df.index)
+num_imputer.fit(merged_df[numeric_columns])
+merged_df[numeric_columns] = num_imputer.transform(merged_df[numeric_columns])
+pickle.dump(num_imputer, open('saved_preprocessors/num_imputer.pkl', 'wb'))
 
-# Impute Strings
-vectorized_parts = []
-# print(string_columns)
+scaler = StandardScaler()
+scaler.fit(merged_df[numeric_columns])
+scaled_nums = scaler.transform(merged_df[numeric_columns])
+scaled_num_df = pd.DataFrame(scaled_nums, columns=numeric_columns, index=merged_df.index)
+pickle.dump(scaler, open('saved_preprocessors/scaler.pkl', 'wb'))
+
+# Impute Strings and store vectorizers
+vectorizers = {}
 merged_df[string_columns] = merged_df[string_columns].fillna('')
 merged_df[string_columns] = merged_df[string_columns].astype(str)
+
+vectorized_parts = []
 for col in string_columns:
     vectorizer = TfidfVectorizer(max_features=500)
-    X = vectorizer.fit_transform(merged_df[col])
+    vectorizer.fit(merged_df[col])
+    X = vectorizer.transform(merged_df[col])
+
+    # Save the vectorizer
+    vectorizers[col] = vectorizer
 
     # Prefix the column names with the original column name
     tfidf_df = pd.DataFrame(X.toarray(), columns=[f'{col}_{word}' for word in vectorizer.get_feature_names_out()])
-
     vectorized_parts.append(tfidf_df)
+
+# Save all vectorizers
+pickle.dump(vectorizers, open('saved_preprocessors/text_vectorizers.pkl', 'wb'))
+
 df_vectorized = pd.concat(vectorized_parts, axis=1)
 
 # Impute categoricals
 cat_imputer = SimpleImputer(strategy='constant', fill_value='Unknown')
-merged_df[categorical_columns] = cat_imputer.fit_transform(merged_df[categorical_columns])
+cat_imputer.fit(merged_df[categorical_columns])
+merged_df[categorical_columns] = cat_imputer.transform(merged_df[categorical_columns])
+pickle.dump(cat_imputer, open('saved_preprocessors/cat_imputer.pkl', 'wb'))
+
 encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-encoded_cats = encoder.fit_transform(merged_df[categorical_columns])
+encoder.fit(merged_df[categorical_columns])
+encoded_cats = encoder.transform(merged_df[categorical_columns])
 encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names_out(categorical_columns),
                               index=merged_df.index)
-# Combine
-final_df = pd.concat([scaled_num_df, encoded_cat_df, df_vectorized,merged_df["deal_size"]], axis=1)
-# print(final_df)
+pickle.dump(encoder, open('saved_preprocessors/cat_encoder.pkl', 'wb'))
 
+# Combine
+final_df = pd.concat([scaled_num_df, encoded_cat_df, df_vectorized, merged_df["deal_size"]], axis=1)
 
 # Apply variance thresholding to remove low variance features
-selector = VarianceThreshold(threshold=0.01)  # You can adjust the threshold as needed
-X_var = selector.fit_transform(final_df[numeric_columns])
+selector = VarianceThreshold(threshold=0.01)
+selector.fit(final_df[numeric_columns])
+pickle.dump(selector, open('saved_preprocessors/variance_selector.pkl', 'wb'))
 
 # Get the columns selected based on variance
 selected_features = final_df[numeric_columns].columns[selector.get_support()]
 print(f"Selected features based on variance: {selected_features}")
+
+# Save selected features
+pickle.dump(selected_features, open('saved_preprocessors/variance_selected_features.pkl', 'wb'))
 
 # Covariance matrix to identify correlated features
 cov_matrix = final_df[numeric_columns].cov()
@@ -222,170 +274,144 @@ for i in range(len(cov_matrix.columns)):
 
 print(f"Highly correlated feature pairs: {highly_correlated_pairs}")
 
+# Save correlated pairs
+pickle.dump(highly_correlated_pairs, open('saved_preprocessors/highly_correlated_pairs.pkl', 'wb'))
+
 # Drop one of the correlated features (based on domain knowledge or a threshold)
 drop_columns = [col for col1, col2 in highly_correlated_pairs for col in [col1, col2]]
 drop_columns = list(set(drop_columns))  # To avoid dropping the same column multiple times
 
+# Save drop columns
+pickle.dump(drop_columns, open('saved_preprocessors/drop_columns.pkl', 'wb'))
+
 # Final feature selection after variance and covariance filtering
 final_selected_features = [col for col in selected_features if col not in drop_columns]
+pickle.dump(final_selected_features, open('saved_preprocessors/final_selected_features.pkl', 'wb'))
 
 X_regress = final_df.copy()
 Y_regress = final_df['price']
 X_regress = X_regress.drop(['price', 'deal_size'], axis=1)
+
 X_class = final_df.copy()
 Y_class = final_df['deal_size']
 X_class = X_class.drop(['price', 'deal_size'], axis=1)
-# print(X)
-# print(Y)
 
-# Split the data
+# Split the data for regression task
+X_train_reg, X_test_reg, y_train_reg, y_test_reg = train_test_split(X_regress, Y_regress, test_size=0.2,
+                                                                    random_state=42)
 
-X_train, X_test, y_train, y_test = train_test_split(X_regress, Y_regress, test_size=0.2, random_state=42)
 # Remove price outliers
-q_low = y_train.quantile(0.01)
-q_high = y_train.quantile(0.99)
-mask_price = (y_train >= q_low) & (y_train <= q_high)
+q_low = y_train_reg.quantile(0.01)
+q_high = y_train_reg.quantile(0.99)
+mask_price = (y_train_reg >= q_low) & (y_train_reg <= q_high)
+
+# Save outlier thresholds
+pickle.dump({'q_low': q_low, 'q_high': q_high}, open('saved_preprocessors/outlier_thresholds.pkl', 'wb'))
 
 # Apply to both
-X_train = X_train[mask_price]
-y_train = y_train[mask_price]
+X_train_reg = X_train_reg[mask_price]
+y_train_reg = y_train_reg[mask_price]
 
-y_train_log = np.log1p(y_train)
-y_test_log = np.log1p(y_test)
+y_train_log = np.log1p(y_train_reg)
+y_test_log = np.log1p(y_test_reg)
 
-# Step 1: Feature Selection
-selector = SelectKBest(score_func=f_regression, k=43)  # Try 250 top features (adjust k if you want)
-X_train_selected = selector.fit_transform(X_train, y_train_log)
-X_test_selected = selector.transform(X_test)
+# Feature Selection for Regression
+selector_regression = SelectKBest(score_func=f_regression, k=43)
+selector_regression.fit(X_train_reg, y_train_log)
+X_train_selected = selector_regression.transform(X_train_reg)
+X_test_selected = selector_regression.transform(X_test_reg)
 
-# Initialize and train the model
+# Save the regression feature selector
+pickle.dump(selector_regression, open('saved_preprocessors/selector_regression.pkl', 'wb'))
 
+# Train linear regression model
 lr = LinearRegression()
 lr.fit(X_train_selected, y_train_log)
 
-# Evaluation
-y_pred_lr_log = lr.predict(X_test_selected)
-y_pred_lr = np.expm1(y_pred_lr_log)
+# Save the model
+pickle.dump(lr, open('saved_models/linear_regression.pkl', 'wb'))
 
-print("Linear Regression:")
-print("MSE:", mean_squared_error(y_test, y_pred_lr))
-print("R² Score:", r2_score(y_test, y_pred_lr))
-
-print(".." * 10)
-
-# Create polynomial features (change degree as needed)
+# Create polynomial features
 poly = PolynomialFeatures(degree=2)
-X_train_poly = poly.fit_transform(X_train_selected)
+poly.fit(X_train_selected)
+X_train_poly = poly.transform(X_train_selected)
 X_test_poly = poly.transform(X_test_selected)
 
-# Train the model
-model = LinearRegression()
-model.fit(X_train_poly, y_train_log)
+# Save the polynomial transformer
+pickle.dump(poly, open('saved_preprocessors/polynomial_transformer.pkl', 'wb'))
 
-# Predict
-y_pred_log = model.predict(X_test_poly)
-y_pred = np.expm1(y_pred_log)
+# Train polynomial regression model
+poly_model = LinearRegression()
+poly_model.fit(X_train_poly, y_train_log)
 
-# Evaluate
-mse = mean_squared_error(y_test, y_pred)
-r2 = r2_score(y_test, y_pred)
-print("Polynomial Regression:")
-print("Mean Squared Error:", mse)
-print("R² Score:", r2)
+# Save the polynomial regression model
+pickle.dump(poly_model, open('saved_models/polynomial_regression.pkl', 'wb'))
 
-residuals_lr = y_test - y_pred_lr
-residuals_poly = y_test - y_pred
-
-plt.figure(figsize=(12, 7))
-
-# Scatter with color based on absolute error for Linear Regression
-scatter_lr = plt.scatter(
-    y_test, y_pred_lr,
-    c=np.abs(residuals_lr), cmap='coolwarm', alpha=0.7, edgecolors='k', label='Linear Regression'
-)
-
-# Scatter with color based on absolute error for Polynomial Regression
-scatter_poly = plt.scatter(
-    y_test, y_pred,
-    c=np.abs(residuals_poly), cmap='viridis', alpha=0.7, edgecolors='k', label='Polynomial Regression'
-)
-
-# Perfect prediction line
-plt.plot(
-    [y_test.min(), y_test.max()],
-    [y_test.min(), y_test.max()],
-    'g--', lw=2, label='Perfect Prediction'
-)
-
-# Linear Regression Fit Line (Manual)
-coeffs_lr = np.polyfit(y_test, y_pred_lr, 1)
-regression_line_lr = np.poly1d(coeffs_lr)
-x_vals = np.linspace(y_test.min(), y_test.max(), 100)
-plt.plot(x_vals, regression_line_lr(x_vals), color='black', linestyle='-', label='Linear Regression Fit')
-
-# Polynomial Regression Fit Line (Manual)
-coeffs_poly = np.polyfit(y_test, y_pred, 2)  # Degree 2 for Polynomial
-regression_line_poly = np.poly1d(coeffs_poly)
-plt.plot(x_vals, regression_line_poly(x_vals), color='orange', linestyle='--', label='Polynomial Regression Fit')
-
-# Colorbars
-cbar_lr = plt.colorbar(scatter_lr)
-cbar_lr.set_label('Absolute Error (LR)')
-
-cbar_poly = plt.colorbar(scatter_poly)
-cbar_poly.set_label('Absolute Error (Poly)')
-
-# Labels and Title
-plt.xlabel("Actual Price")
-plt.ylabel("Predicted Price")
-plt.title("Linear vs Polynomial Regression: Actual vs Predicted (Colored by Error)")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
-
-
-
-
-# Step 1: General Feature Selection (for first models) - you can set k=10 or any reasonable value
+# General Feature Selection for ensemble models
 selector_general = SelectKBest(score_func=f_regression, k=40)
-X_train_selected = selector_general.fit_transform(X_train, y_train)
-X_test_selected = selector_general.transform(X_test)
+selector_general.fit(X_train_reg, y_train_reg)
+X_train_general = selector_general.transform(X_train_reg)
+X_test_general = selector_general.transform(X_test_reg)
 
-# Model 1: Random Forest
+# Save the general feature selector
+pickle.dump(selector_general, open('saved_preprocessors/selector_general.pkl', 'wb'))
+
+# Train Random Forest model
 rf = RandomForestRegressor(n_estimators=100, random_state=44)
-rf.fit(X_train_selected, y_train)
-y_pred_rf = rf.predict(X_test_selected)
+rf.fit(X_train_general, y_train_reg)
 
-# Model 2: XGBoost
+# Save Random Forest model
+pickle.dump(rf, open('saved_models/random_forest_regressor.pkl', 'wb'))
+
+# Train XGBoost model
 xgb_model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=100, random_state=42)
-xgb_model.fit(X_train_selected, y_train)
-y_pred_xgb = xgb_model.predict(X_test_selected)
+xgb_model.fit(X_train_general, y_train_reg)
 
-# Model 3: Ridge Regression
+# Save XGBoost model
+pickle.dump(xgb_model, open('saved_models/xgboost_regressor.pkl', 'wb'))
+
+# Feature selection for Ridge
 selector_ridge = SelectKBest(score_func=f_regression, k=100)
-X_train_selected_ridge = selector_ridge.fit_transform(X_train, y_train)
-X_test_selected_ridge = selector_ridge.transform(X_test)
+selector_ridge.fit(X_train_reg, y_train_reg)
+X_train_ridge = selector_ridge.transform(X_train_reg)
+X_test_ridge = selector_ridge.transform(X_test_reg)
 
+# Save Ridge selector
+pickle.dump(selector_ridge, open('saved_preprocessors/selector_ridge.pkl', 'wb'))
+
+# Train Ridge model
 ridge_model = Ridge(alpha=1.0)
-ridge_model.fit(X_train_selected_ridge, y_train)
-y_pred_ridge = ridge_model.predict(X_test_selected_ridge)
+ridge_model.fit(X_train_ridge, y_train_reg)
 
-# Step 2: Hyperparameter tuning for RandomForest
+# Save Ridge model
+pickle.dump(ridge_model, open('saved_models/ridge_regression.pkl', 'wb'))
+
+# Best params for Random Forest via GridSearch
 param_grid = {'n_estimators': [100, 200], 'max_depth': [None, 10, 20]}
 grid_search_rf = GridSearchCV(estimator=rf, param_grid=param_grid, cv=3, scoring='neg_mean_squared_error', n_jobs=-1)
-grid_search_rf.fit(X_train_selected, y_train)  # use selected features here!
+grid_search_rf.fit(X_train_general, y_train_reg)
 print(f"Best params for RandomForest: {grid_search_rf.best_params_}")
 
-# Step 3: Create Stacking Model (with k=200 feature selection)
-selector_stacking = SelectKBest(score_func=f_regression, k=200)
-X_train_selected_stacking = selector_stacking.fit_transform(X_train, y_train)
-X_test_selected_stacking = selector_stacking.transform(X_test)
+# Save best Random Forest model
+best_rf = RandomForestRegressor(**grid_search_rf.best_params_, random_state=44)
+best_rf.fit(X_train_general, y_train_reg)
+pickle.dump(best_rf, open('saved_models/best_random_forest_regressor.pkl', 'wb'))
 
+# Feature Selection for Stacking
+selector_stacking = SelectKBest(score_func=f_regression, k=200)
+selector_stacking.fit(X_train_reg, y_train_reg)
+X_train_stacking = selector_stacking.transform(X_train_reg)
+X_test_stacking = selector_stacking.transform(X_test_reg)
+
+# Save stacking selector
+pickle.dump(selector_stacking, open('saved_preprocessors/selector_stacking.pkl', 'wb'))
+
+# Create stacking model
 poly_regressor = make_pipeline(
-    PolynomialFeatures(degree=2),  # You can adjust the degree of the polynomial here
+    PolynomialFeatures(degree=2),
     LinearRegression()
 )
+
 estimators = [
     ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
     ('ridge', Ridge(alpha=1.0)),
@@ -393,161 +419,158 @@ estimators = [
 ]
 
 stacking_model = StackingRegressor(estimators=estimators, final_estimator=Ridge())
-stacking_model.fit(X_train_selected_stacking, y_train)
-y_pred_stacking = stacking_model.predict(X_test_selected_stacking)
+stacking_model.fit(X_train_stacking, y_train_reg)
 
-# Step 4: Evaluate all models
-print(f"RandomForest MSE: {mean_squared_error(y_test, y_pred_rf)}, R2: {r2_score(y_test, y_pred_rf)}")
-print(f"XGBoost MSE: {mean_squared_error(y_test, y_pred_xgb)}, R2: {r2_score(y_test, y_pred_xgb)}")
-print(f"Ridge MSE: {mean_squared_error(y_test, y_pred_ridge)}, R2: {r2_score(y_test, y_pred_ridge)}")
-print(f"Stacking Model MSE: {mean_squared_error(y_test, y_pred_stacking)}, R2: {r2_score(y_test, y_pred_stacking)}")
+# Save stacking model
+pickle.dump(stacking_model, open('saved_models/stacking_regressor.pkl', 'wb'))
 
-# Step 5: Visualizing Predictions
-plt.figure(figsize=(12, 7))
-plt.scatter(y_test, y_pred_rf, c='blue', label='RandomForest')
-plt.scatter(y_test, y_pred_xgb, c='green', label='XGBoost')
-plt.scatter(y_test, y_pred_ridge, c='red', label='Ridge')
-plt.scatter(y_test, y_pred_stacking, c='purple', label='Stacking (k=200)')
-
-plt.xlabel("Actual Price")
-plt.ylabel("Predicted Price")
-plt.title("Model Comparison")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
-
+# Classification Task
 label_encoder = LabelEncoder()
-Y_class_encoded = label_encoder.fit_transform(Y_class)
+label_encoder.fit(Y_class)
+Y_class_encoded = label_encoder.transform(Y_class)
 
-X_train, X_test, y_train, y_test = train_test_split(X_class, Y_class_encoded, test_size=0.2, random_state=42, stratify=Y_class)
+# Save label encoder
+pickle.dump(label_encoder, open('saved_preprocessors/label_encoder.pkl', 'wb'))
 
-models = []
+X_train_cls, X_test_cls, y_train_cls, y_test_cls = train_test_split(X_class, Y_class_encoded, test_size=0.2,
+                                                                    random_state=42, stratify=Y_class)
 
-selector = SelectKBest(score_func=f_classif, k=175)
-X_train = selector.fit_transform(X_train, y_train)
-X_test = selector.transform(X_test)
+# Feature selection for classification
+cls_selector = SelectKBest(score_func=f_classif, k=175)
+cls_selector.fit(X_train_cls, y_train_cls)
+X_train_cls_selected = cls_selector.transform(X_train_cls)
+X_test_cls_selected = cls_selector.transform(X_test_cls)
 
-best_accuracy = 0
-best_model_lr = None
+# Save classification selector
+pickle.dump(cls_selector, open('saved_preprocessors/classification_selector.pkl', 'wb'))
 
-print("\n--- Logistic Regression ---")
+# Train Logistic Regression with different C values
+best_lr = None
+best_lr_accuracy = 0
 for C in [0.01, 1, 100]:
-    model = LogisticRegression(C=C, max_iter=1000)
-    model.fit(X_train, y_train)
-    acc = accuracy_score(y_test, model.predict(X_test))
-    if acc > best_accuracy:
-        best_accuracy = acc
-        best_model_lr = model
-    print(f"C={C} -> Accuracy: {acc:.4f}")
+    lr_model = LogisticRegression(C=C, max_iter=1000)
+    lr_model.fit(X_train_cls_selected, y_train_cls)
+    acc = accuracy_score(y_test_cls, lr_model.predict(X_test_cls_selected))
+    if acc > best_lr_accuracy:
+        best_lr_accuracy = acc
+        best_lr = lr_model
 
-best_accuracy = 0
-best_model_lsvm = None
+# Save best logistic regression model
+pickle.dump(best_lr, open('saved_models/best_logistic_regression.pkl', 'wb'))
 
-print("\n--- Linear SVM ---")
+# Train Linear SVM with different C values
+best_lsvm = None
+best_lsvm_accuracy = 0
 for C in [0.01, 1, 100]:
-    model = SVC(kernel='linear', C=C, probability=True)
-    model.fit(X_train, y_train)
-    acc = accuracy_score(y_test, model.predict(X_test))
-    if acc > best_accuracy:
-        best_accuracy = acc
-        best_model_lsvm = model
-    print(f"C={C} -> Accuracy: {acc:.4f}")
+    svm_model = SVC(kernel='linear', C=C, probability=True)
+    svm_model.fit(X_train_cls_selected, y_train_cls)
+    acc = accuracy_score(y_test_cls, svm_model.predict(X_test_cls_selected))
+    if acc > best_lsvm_accuracy:
+        best_lsvm_accuracy = acc
+        best_lsvm = svm_model
 
-best_accuracy = 0
-best_model_psvm = None
+# Save best linear SVM model
+pickle.dump(best_lsvm, open('saved_models/best_linear_svm.pkl', 'wb'))
 
-print("\n--- Poly SVM ---")
+# Train Polynomial SVM with different degrees
+best_psvm = None
+best_psvm_accuracy = 0
 for degree in [2, 3, 5]:
-    model = SVC(kernel='poly', degree=degree, probability=True)
-    model.fit(X_train, y_train)
-    acc = accuracy_score(y_test, model.predict(X_test))
-    if acc > best_accuracy:
-        best_accuracy = acc
-        best_model_psvm = model
-    print(f"Degree={degree} -> Accuracy: {acc:.4f}")
+    svm_poly_model = SVC(kernel='poly', degree=degree, probability=True)
+    svm_poly_model.fit(X_train_cls_selected, y_train_cls)
+    acc = accuracy_score(y_test_cls, svm_poly_model.predict(X_test_cls_selected))
+    if acc > best_psvm_accuracy:
+        best_psvm_accuracy = acc
+        best_psvm = svm_poly_model
 
-best_accuracy = 0
-best_model_knn = None
+# Save best polynomial SVM model
+pickle.dump(best_psvm, open('saved_models/best_poly_svm.pkl', 'wb'))
 
-print("\n--- KNN ---")
+# Train KNN with different neighbor values
+best_knn = None
+best_knn_accuracy = 0
 for k in [3, 5, 11]:
-    model = KNeighborsClassifier(n_neighbors=k)
-    model.fit(X_train, y_train)
-    acc = accuracy_score(y_test, model.predict(X_test))
-    if acc > best_accuracy:
-        best_accuracy = acc
-        best_model_knn = model
-    print(f"n_neighbors={k} -> Accuracy: {acc:.4f}")
+    knn_model = KNeighborsClassifier(n_neighbors=k)
+    knn_model.fit(X_train_cls_selected, y_train_cls)
+    acc = accuracy_score(y_test_cls, knn_model.predict(X_test_cls_selected))
+    if acc > best_knn_accuracy:
+        best_knn_accuracy = acc
+        best_knn = knn_model
 
-best_accuracy = 0
-best_model_dt = None
+# Save best KNN model
+pickle.dump(best_knn, open('saved_models/best_knn.pkl', 'wb'))
 
-print("\n--- Decision Tree ---")
+# Train Decision Tree with different depths
+best_dt = None
+best_dt_accuracy = 0
 for depth in [3, 5, 10]:
-    model = DecisionTreeClassifier(max_depth=depth, random_state=42)
-    model.fit(X_train, y_train)
-    acc = accuracy_score(y_test, model.predict(X_test))
-    if acc > best_accuracy:
-        best_accuracy = acc
-        best_model_dt = model
-    print(f"max_depth={depth} -> Accuracy: {acc:.4f}")
+    dt_model = DecisionTreeClassifier(max_depth=depth, random_state=42)
+    dt_model.fit(X_train_cls_selected, y_train_cls)
+    acc = accuracy_score(y_test_cls, dt_model.predict(X_test_cls_selected))
+    if acc > best_dt_accuracy:
+        best_dt_accuracy = acc
+        best_dt = dt_model
 
-best_accuracy = 0
-best_model_rf = None
+# Save best decision tree model
+pickle.dump(best_dt, open('saved_models/best_decision_tree.pkl', 'wb'))
 
-print("\n--- Random Forest ---")
+# Train Random Forest with different estimators
+best_rf_cls = None
+best_rf_cls_accuracy = 0
 for n in [50, 100, 200]:
-    model = RandomForestClassifier(n_estimators=n, random_state=42)
-    model.fit(X_train, y_train)
-    acc = accuracy_score(y_test, model.predict(X_test))
-    if acc > best_accuracy:
-        best_accuracy = acc
-        best_model_rf = model
-    print(f"n_estimators={n} -> Accuracy: {acc:.4f}")
+    rf_cls_model = RandomForestClassifier(n_estimators=n, random_state=42)
+    rf_cls_model.fit(X_train_cls_selected, y_train_cls)
+    acc = accuracy_score(y_test_cls, rf_cls_model.predict(X_test_cls_selected))
+    if acc > best_rf_cls_accuracy:
+        best_rf_cls_accuracy = acc
+        best_rf_cls = rf_cls_model
 
+# Save best random forest classifier model
+pickle.dump(best_rf_cls, open('saved_models/best_random_forest_classifier.pkl', 'wb'))
+
+# Create dictionary of best models
 models = {
-    "Logistic Regression": best_model_lr,
-    "Linear SVM": best_model_lsvm,
-    "Poly SVM": best_model_psvm,
-    "KNN": best_model_knn,
-    "Decision Tree": best_model_dt,
-    "Random Forest": best_model_rf
+    "Logistic Regression": best_lr,
+    "Linear SVM": best_lsvm,
+    "Poly SVM": best_psvm,
+    "KNN": best_knn,
+    "Decision Tree": best_dt,
+    "Random Forest": best_rf_cls
 }
 
-# Stacking Ensemble (Logistic Regression as final estimator)
+# Create and train Stacking Classifier
 stacking_clf = StackingClassifier(
     estimators=[
         ('Logistic Regression', models["Logistic Regression"]),
         ('Linear SVM', models["Linear SVM"]),
-        # ('Poly SVM', models["Poly SVM"]),
         ('KNN', models["KNN"]),
-        ('Decision Tree', models["KNN"]),
+        ('Decision Tree', models["Decision Tree"]),
         ('Random Forest', models["Random Forest"])
     ],
     final_estimator=LogisticRegression(),
     cv=5
 )
 
-stacking_clf.fit(X_train, y_train)
-stack_preds = stacking_clf.predict(X_test)
-print("\nStacking Ensemble Results:")
-print(f"Accuracy: {accuracy_score(y_test, stack_preds):.4f}")
+stacking_clf.fit(X_train_cls_selected, y_train_cls)
 
-# Voting Ensemble (Soft Voting)
+# Save stacking classifier
+pickle.dump(stacking_clf, open('saved_models/stacking_classifier.pkl', 'wb'))
+
+# Create and train Voting Classifier
 voting_clf = VotingClassifier(
     estimators=[
         ('Logistic Regression', models["Logistic Regression"]),
         ('Linear SVM', models["Linear SVM"]),
-        # ('Poly SVM', models["Poly SVM"]),
         ('KNN', models["KNN"]),
-        ('Decision Tree', models["KNN"]),
+        ('Decision Tree', models["Decision Tree"]),
         ('Random Forest', models["Random Forest"])
     ],
     voting='soft'
 )
 
-voting_clf.fit(X_train, y_train)
-voting_preds = voting_clf.predict(X_test)
-print("\nVoting Ensemble (Soft) Results:")
-print(f"Accuracy: {accuracy_score(y_test, voting_preds):.4f}")
+voting_clf.fit(X_train_cls_selected, y_train_cls)
+
+# Save voting classifier
+pickle.dump(voting_clf, open('saved_models/voting_classifier.pkl', 'wb'))
+
+print("All preprocessing steps and models have been saved successfully!")
