@@ -8,12 +8,14 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_regression, f_classif
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
 
+
 # Function to get acquisition quarter
 def get_quarter(month):
     if pd.notnull(month):
         return ((month - 1) // 3) + 1
     else:
         return np.nan
+
 
 # Load and merge input files
 def load_and_merge_data(acquisitions_file, acquiring_file, acquired_file, founders_file, acquisition_class_file=None):
@@ -61,7 +63,8 @@ def load_and_merge_data(acquisitions_file, acquiring_file, acquired_file, founde
 
         merged_df = merged_df.merge(founders_agg, how='left', left_on='Acquiring Company', right_on='Companies')
 
-        merged_df['Year of acquisition announcement'] = pd.to_numeric(merged_df['Year of acquisition announcement'], errors='coerce').fillna(0).astype(int)
+        merged_df['Year of acquisition announcement'] = pd.to_numeric(merged_df['Year of acquisition announcement'],
+                                                                      errors='coerce').fillna(0).astype(int)
         merged_df['Deal announced on'] = pd.to_datetime(merged_df['Deal announced on'], errors='coerce')
         merged_df['acquisition_year'] = merged_df['Deal announced on'].dt.year
         merged_df['acquisition_month'] = merged_df['Deal announced on'].dt.month
@@ -69,7 +72,6 @@ def load_and_merge_data(acquisitions_file, acquiring_file, acquired_file, founde
         duplicate_columns = ['Acquiring Company_Acquirer', 'Acquired by', 'Deal announced on', 'Company', 'Companies']
         merged_df.drop(columns=[col for col in duplicate_columns if col in merged_df.columns], inplace=True)
 
-        print("deal_size value counts after merge:", merged_df['deal_size'].value_counts(dropna=False))
         return merged_df
     except FileNotFoundError as e:
         print(f"Error: File not found - {e}")
@@ -77,6 +79,7 @@ def load_and_merge_data(acquisitions_file, acquiring_file, acquired_file, founde
     except Exception as e:
         print(f"Error in data merging: {e}")
         return None
+
 
 # Preprocess merged data
 def preprocess_data(merged_df):
@@ -95,10 +98,12 @@ def preprocess_data(merged_df):
 
         merged_df['Price'] = merged_df['Price'].replace(r'[\$,]', '', regex=True).astype(float)
         merged_df['Total Funding ($)'] = merged_df['Total Funding ($)'].replace(r'[\$,]', '', regex=True).astype(float)
-        merged_df['Number of Employees'] = merged_df['Number of Employees'].fillna(0).replace(r'[\,]', '', regex=True).astype(int)
+        merged_df['Number of Employees'] = merged_df['Number of Employees'].fillna(0).replace(r'[\,]', '',
+                                                                                              regex=True).astype(int)
         merged_df['Year Founded'] = pd.to_numeric(merged_df['Year Founded'], errors='coerce').fillna(0).astype(int)
         merged_df['IPO'] = pd.to_numeric(merged_df['IPO'], errors='coerce').fillna(0).astype(int)
-        merged_df['Year of acquisition announcement'] = pd.to_numeric(merged_df['Year of acquisition announcement'], errors='coerce').fillna(0).astype(int)
+        merged_df['Year of acquisition announcement'] = pd.to_numeric(merged_df['Year of acquisition announcement'],
+                                                                      errors='coerce').fillna(0).astype(int)
 
         mode_columns = ['Number of Employees (year of last update)', 'acquisition_year', 'acquisition_month']
         for column in mode_columns:
@@ -114,11 +119,14 @@ def preprocess_data(merged_df):
         for column in empty_columns:
             merged_df[column] = merged_df[column].fillna("")
 
-        nothing_columns = ['News', 'News Link', 'CrunchBase Profile', 'Image', 'Tagline', 'Market Categories', 'Address (HQ)',
-                          'City (HQ)', 'State / Region (HQ)', 'Country (HQ)', 'Description', 'Homepage', 'Twitter', 'API',
-                          'CrunchBase Profile_Acquired', 'Image_Acquired', 'Tagline_Acquired', 'Market Categories_Acquired',
-                          'Address (HQ)_Acquired', 'City (HQ)_Acquired', 'State / Region (HQ)_Acquired',
-                          'Country (HQ)_Acquired', 'Description_Acquired', 'Homepage_Acquired', 'Twitter_Acquired']
+        nothing_columns = ['News', 'News Link', 'CrunchBase Profile', 'Image', 'Tagline', 'Market Categories',
+                           'Address (HQ)',
+                           'City (HQ)', 'State / Region (HQ)', 'Country (HQ)', 'Description', 'Homepage', 'Twitter',
+                           'API',
+                           'CrunchBase Profile_Acquired', 'Image_Acquired', 'Tagline_Acquired',
+                           'Market Categories_Acquired',
+                           'Address (HQ)_Acquired', 'City (HQ)_Acquired', 'State / Region (HQ)_Acquired',
+                           'Country (HQ)_Acquired', 'Description_Acquired', 'Homepage_Acquired', 'Twitter_Acquired']
         for column in nothing_columns:
             merged_df[column] = merged_df[column].fillna("Nothing")
 
@@ -129,12 +137,14 @@ def preprocess_data(merged_df):
         merged_df.columns = [col.strip().lower().replace(' ', '_') for col in merged_df.columns]
 
         dropped_columns = ['acquisitions_id', 'acquisition_profile', 'news', 'news_link', 'crunchbase_profile', 'image',
-                           'tagline', 'founders', 'board_members', 'address_(hq)', 'description', 'homepage', 'twitter', 'api',
+                           'tagline', 'founders', 'board_members', 'address_(hq)', 'description', 'homepage', 'twitter',
+                           'api',
                            'crunchbase_profile_acquired', 'image_acquired', 'tagline_acquired', 'address_(hq)_acquired',
                            'description_acquired', 'homepage_acquired', 'twitter_acquired', 'api_acquired']
         merged_df.drop(columns=[col for col in dropped_columns if col in merged_df.columns], inplace=True)
 
-        merged_df['year_founded_acquired'] = pd.to_numeric(merged_df['year_founded_acquired'], errors='coerce').astype(int)
+        merged_df['year_founded_acquired'] = pd.to_numeric(merged_df['year_founded_acquired'], errors='coerce').astype(
+            int)
         merged_df['year_founded'] = pd.to_numeric(merged_df['year_founded'], errors='coerce').astype(int)
         merged_df['acquisition_year'] = pd.to_numeric(merged_df['acquisition_year'], errors='coerce').astype(int)
         merged_df['acquirer_age'] = merged_df['acquisition_year'] - merged_df['year_founded']
@@ -153,16 +163,19 @@ def preprocess_data(merged_df):
         for col in string_columns:
             vectorizer = vectorizers[col]
             X = vectorizer.transform(merged_df[col])
-            tfidf_df = pd.DataFrame(X.toarray(), columns=[f'{col}_{word}' for word in vectorizer.get_feature_names_out()])
+            tfidf_df = pd.DataFrame(X.toarray(),
+                                    columns=[f'{col}_{word}' for word in vectorizer.get_feature_names_out()])
             vectorized_parts.append(tfidf_df)
         df_vectorized = pd.concat(vectorized_parts, axis=1)
 
         merged_df[categorical_columns] = cat_imputer.transform(merged_df[categorical_columns])
         encoded_cats = encoder.transform(merged_df[categorical_columns])
-        encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names_out(categorical_columns), index=merged_df.index)
+        encoded_cat_df = pd.DataFrame(encoded_cats, columns=encoder.get_feature_names_out(categorical_columns),
+                                      index=merged_df.index)
 
-        final_df = pd.concat([scaled_num_df, encoded_cat_df, df_vectorized, merged_df['deal_size'], merged_df['price']], axis=1)
-        print("deal_size value counts in final_df:", final_df['deal_size'].value_counts(dropna=False))
+        final_df = pd.concat([scaled_num_df, encoded_cat_df, df_vectorized, merged_df['deal_size'], merged_df['price']],
+                             axis=1)
+
         return final_df
     except FileNotFoundError as e:
         print(f"Error: Preprocessor file not found - {e}")
@@ -170,6 +183,7 @@ def preprocess_data(merged_df):
     except Exception as e:
         print(f"Error in preprocessing: {e}")
         return None
+
 
 # Run all saved models
 def run_all_models(final_df):
@@ -187,9 +201,8 @@ def run_all_models(final_df):
         X_regress = final_df.drop(['price', 'deal_size'], axis=1, errors='ignore')
         X_class = final_df.drop(['price', 'deal_size'], axis=1, errors='ignore')
         y_regress = final_df['price'] if 'price' in final_df.columns else None
-        y_regress = y_regress.iloc[:,[0]]
+        y_regress = y_regress.iloc[:, [0]]
         y_class = final_df['deal_size'] if 'deal_size' in final_df.columns else None
-        print(f"y_class exists: {y_class is not None}, value counts: {y_class.value_counts(dropna=False) if y_class is not None else 'None'}")
 
         # Initialize results
         predictions = {}
@@ -205,12 +218,13 @@ def run_all_models(final_df):
             ('best_random_forest_regressor', selector_general, lambda x: x),
             ('stacking_regressor', selector_stacking, lambda x: x)
         ]
-
+        print("\n=== REGRESSION MODELS ===")
+        print(f"{'Model':<30} {'MSE':<10} {'R²':<10}")
+        print("-" * 50)
         for model_name, selector, transform, *extra in regression_models:
             try:
-                print(f"Running {model_name}...")
+
                 model = pickle.load(open(f'saved_models/{model_name}.pkl', 'rb'))
-                print(f"X_regress shape: {X_regress.shape}, expected features: {selector.n_features_in_}")
                 X_selected = selector.transform(X_regress)
                 if extra:
                     X_selected = extra[0].transform(X_selected)
@@ -219,7 +233,7 @@ def run_all_models(final_df):
                 mse = mean_squared_error(y_regress, pred)
                 r2 = r2_score(y_regress, pred)
                 metrics[model_name] = {'MSE': mse, 'R²': r2}
-                print(f"{model_name}: MSE={mse:.4f}, R²={r2:.4f}")
+                print(f"{model_name:<30} {mse:.4f}     {r2:.4f}")
             except FileNotFoundError:
                 print(f"Error: Model {model_name}.pkl not found")
             except Exception as e:
@@ -236,12 +250,13 @@ def run_all_models(final_df):
             'stacking_classifier',
             'voting_classifier'
         ]
-
+        print("\n=== CLASSIFICATION MODELS ===")
+        print(f"{'Model':<30} {'Accuracy':<10}")
+        print("-" * 50)
         for model_name in classification_models:
             try:
-                print(f"Running {model_name}...")
+
                 model = pickle.load(open(f'saved_models/{model_name}.pkl', 'rb'))
-                print(f"X_class shape: {X_class.shape}, expected features: {cls_selector.n_features_in_}")
                 X_selected = cls_selector.transform(X_class)
                 pred_encoded = model.predict(X_selected)
                 pred = label_encoder.inverse_transform(pred_encoded)
@@ -254,7 +269,7 @@ def run_all_models(final_df):
                         y_class_encoded = label_encoder.transform(y_class_valid)
                         accuracy = accuracy_score(y_class_encoded, pred_encoded_valid)
                         metrics[model_name] = {'Accuracy': accuracy}
-                        print(f"{model_name}: Accuracy={accuracy:.4f}")
+                        print(f"{model_name:<30} {accuracy:.4f}")
                     else:
                         print(f"No non-null deal_size values for {model_name}, skipping metrics")
                 else:
@@ -279,9 +294,11 @@ def run_all_models(final_df):
         print(f"Error in run_all_models: {e}")
         return None, None
 
+
 # Main function
 def make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_file, acquisition_class_file=None):
-    merged_df = load_and_merge_data(acquisitions_file, acquiring_file, acquired_file, founders_file, acquisition_class_file)
+    merged_df = load_and_merge_data(acquisitions_file, acquiring_file, acquired_file, founders_file,
+                                    acquisition_class_file)
     if merged_df is None:
         print("Failed to load and merge data")
         return
@@ -294,6 +311,7 @@ def make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_
     predictions_df, metrics_df = run_all_models(final_df)
     if predictions_df is not None:
         print("All models executed successfully!")
+
 
 if __name__ == "__main__":
     acquisitions_file = "Acquisitions.csv"
