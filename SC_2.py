@@ -10,7 +10,8 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.feature_selection import VarianceThreshold
 import matplotlib.pyplot as plt
 from sklearn.feature_selection import SelectKBest, f_regression
-from sklearn.ensemble import RandomForestRegressor, StackingRegressor, RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor, StackingRegressor, RandomForestClassifier, StackingClassifier, \
+    VotingClassifier
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
@@ -423,12 +424,12 @@ X_train, X_test, y_train, y_test = train_test_split(X_class, Y_class_encoded, te
 
 models = {
     "Logistic Regression": LogisticRegression(max_iter=1000),
-    "Linear SVM": SVC(kernel='linear'),
-    "Poly SVM": SVC(kernel='poly', degree=3),
+    "Linear SVM": SVC(kernel='linear', probability=True),
+    "Poly SVM": SVC(kernel='poly', degree=3,probability=True),
     "KNN": KNeighborsClassifier(n_neighbors=5),
     "Decision Tree": DecisionTreeClassifier(random_state=42),
     "Random Forest": RandomForestClassifier(random_state=42),
-    "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+    "XGBoost": XGBClassifier(eval_metric='logloss')
 }
 
 for name, model in models.items():
@@ -437,3 +438,37 @@ for name, model in models.items():
     print(f"\n{name} Results:")
     print(f"Accuracy: {accuracy_score(y_test, predictions):.4f}")
 
+# Stacking Ensemble (Logistic Regression as final estimator)
+stacking_clf = StackingClassifier(
+    estimators=[
+        ('lr', models["Logistic Regression"]),
+        ('svm', models["Linear SVM"]),
+        ('knn', models["KNN"]),
+        ('rf', models["Random Forest"]),
+        ('xgb', models["XGBoost"])
+    ],
+    final_estimator=LogisticRegression(),
+    cv=5
+)
+
+stacking_clf.fit(X_train, y_train)
+stack_preds = stacking_clf.predict(X_test)
+print("\nStacking Ensemble Results:")
+print(f"Accuracy: {accuracy_score(y_test, stack_preds):.4f}")
+
+# Voting Ensemble (Soft Voting)
+voting_clf = VotingClassifier(
+    estimators=[
+        ('lr', models["Logistic Regression"]),
+        ('svm', models["Linear SVM"]),
+        ('knn', models["KNN"]),
+        ('rf', models["Random Forest"]),
+        ('xgb', models["XGBoost"])
+    ],
+    voting='soft'
+)
+
+voting_clf.fit(X_train, y_train)
+voting_preds = voting_clf.predict(X_test)
+print("\nVoting Ensemble (Soft) Results:")
+print(f"Accuracy: {accuracy_score(y_test, voting_preds):.4f}")
