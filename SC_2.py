@@ -331,6 +331,16 @@ lr.fit(X_train_selected, y_train_log)
 # Save the model
 pickle.dump(lr, open('saved_models/linear_regression.pkl', 'wb'))
 
+# Evaluation
+y_pred_lr_log = lr.predict(X_test_selected)
+y_pred_lr = np.expm1(y_pred_lr_log)
+
+print("Linear Regression:")
+print("MSE:", mean_squared_error(y_test_reg, y_pred_lr))
+print("R² Score:", r2_score(y_test_reg, y_pred_lr))
+
+print(".." * 10)
+
 # Create polynomial features
 poly = PolynomialFeatures(degree=2)
 poly.fit(X_train_selected)
@@ -347,6 +357,18 @@ poly_model.fit(X_train_poly, y_train_log)
 # Save the polynomial regression model
 pickle.dump(poly_model, open('saved_models/polynomial_regression.pkl', 'wb'))
 
+# Predict
+y_pred_log = poly_model.predict(X_test_poly)
+y_pred = np.expm1(y_pred_log)
+
+# Evaluate
+mse = mean_squared_error(y_test_reg, y_pred)
+r2 = r2_score(y_test_reg, y_pred)
+print("Polynomial Regression:")
+print("Mean Squared Error:", mse)
+print("R² Score:", r2)
+
+
 # General Feature Selection for ensemble models
 selector_general = SelectKBest(score_func=f_regression, k=40)
 selector_general.fit(X_train_reg, y_train_reg)
@@ -359,6 +381,7 @@ pickle.dump(selector_general, open('saved_preprocessors/selector_general.pkl', '
 # Train Random Forest model
 rf = RandomForestRegressor(n_estimators=100, random_state=44)
 rf.fit(X_train_general, y_train_reg)
+y_pred_rf = rf.predict(X_test_general)
 
 # Save Random Forest model
 pickle.dump(rf, open('saved_models/random_forest_regressor.pkl', 'wb'))
@@ -366,6 +389,7 @@ pickle.dump(rf, open('saved_models/random_forest_regressor.pkl', 'wb'))
 # Train XGBoost model
 xgb_model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=100, random_state=42)
 xgb_model.fit(X_train_general, y_train_reg)
+y_pred_xgb = xgb_model.predict(X_test_general)
 
 # Save XGBoost model
 pickle.dump(xgb_model, open('saved_models/xgboost_regressor.pkl', 'wb'))
@@ -385,6 +409,9 @@ ridge_model.fit(X_train_ridge, y_train_reg)
 
 # Save Ridge model
 pickle.dump(ridge_model, open('saved_models/ridge_regression.pkl', 'wb'))
+
+y_pred_ridge = ridge_model.predict(X_test_ridge)
+
 
 # Best params for Random Forest via GridSearch
 param_grid = {'n_estimators': [100, 200], 'max_depth': [None, 10, 20]}
@@ -421,8 +448,15 @@ estimators = [
 stacking_model = StackingRegressor(estimators=estimators, final_estimator=Ridge())
 stacking_model.fit(X_train_stacking, y_train_reg)
 
+
 # Save stacking model
 pickle.dump(stacking_model, open('saved_models/stacking_regressor.pkl', 'wb'))
+
+y_pred_stacking = stacking_model.predict(X_test_stacking)
+print(f"RandomForest MSE: {mean_squared_error(y_test_reg, y_pred_rf)}, R2: {r2_score(y_test_reg, y_pred_rf)}")
+print(f"XGBoost MSE: {mean_squared_error(y_test_reg, y_pred_xgb)}, R2: {r2_score(y_test_reg, y_pred_xgb)}")
+print(f"Ridge MSE: {mean_squared_error(y_test_reg, y_pred_ridge)}, R2: {r2_score(y_test_reg, y_pred_ridge)}")
+print(f"Stacking Model MSE: {mean_squared_error(y_test_reg, y_pred_stacking)}, R2: {r2_score(y_test_reg, y_pred_stacking)}")
 
 # Classification Task
 label_encoder = LabelEncoder()
@@ -447,6 +481,7 @@ pickle.dump(cls_selector, open('saved_preprocessors/classification_selector.pkl'
 # Train Logistic Regression with different C values
 best_lr = None
 best_lr_accuracy = 0
+print("\n--- Linear SVM ---")
 for C in [0.01, 1, 100]:
     lr_model = LogisticRegression(C=C, max_iter=1000)
     lr_model.fit(X_train_cls_selected, y_train_cls)
@@ -454,6 +489,7 @@ for C in [0.01, 1, 100]:
     if acc > best_lr_accuracy:
         best_lr_accuracy = acc
         best_lr = lr_model
+    print(f"C={C} -> Accuracy: {acc:.4f}")
 
 # Save best logistic regression model
 pickle.dump(best_lr, open('saved_models/best_logistic_regression.pkl', 'wb'))
@@ -461,6 +497,7 @@ pickle.dump(best_lr, open('saved_models/best_logistic_regression.pkl', 'wb'))
 # Train Linear SVM with different C values
 best_lsvm = None
 best_lsvm_accuracy = 0
+print("\n--- Linear SVM ---")
 for C in [0.01, 1, 100]:
     svm_model = SVC(kernel='linear', C=C, probability=True)
     svm_model.fit(X_train_cls_selected, y_train_cls)
@@ -468,6 +505,7 @@ for C in [0.01, 1, 100]:
     if acc > best_lsvm_accuracy:
         best_lsvm_accuracy = acc
         best_lsvm = svm_model
+    print(f"C={C} -> Accuracy: {acc:.4f}")
 
 # Save best linear SVM model
 pickle.dump(best_lsvm, open('saved_models/best_linear_svm.pkl', 'wb'))
@@ -475,6 +513,7 @@ pickle.dump(best_lsvm, open('saved_models/best_linear_svm.pkl', 'wb'))
 # Train Polynomial SVM with different degrees
 best_psvm = None
 best_psvm_accuracy = 0
+print("\n--- Poly SVM ---")
 for degree in [2, 3, 5]:
     svm_poly_model = SVC(kernel='poly', degree=degree, probability=True)
     svm_poly_model.fit(X_train_cls_selected, y_train_cls)
@@ -482,6 +521,7 @@ for degree in [2, 3, 5]:
     if acc > best_psvm_accuracy:
         best_psvm_accuracy = acc
         best_psvm = svm_poly_model
+    print(f"Degree={degree} -> Accuracy: {acc:.4f}")
 
 # Save best polynomial SVM model
 pickle.dump(best_psvm, open('saved_models/best_poly_svm.pkl', 'wb'))
@@ -489,6 +529,7 @@ pickle.dump(best_psvm, open('saved_models/best_poly_svm.pkl', 'wb'))
 # Train KNN with different neighbor values
 best_knn = None
 best_knn_accuracy = 0
+print("\n--- KNN ---")
 for k in [3, 5, 11]:
     knn_model = KNeighborsClassifier(n_neighbors=k)
     knn_model.fit(X_train_cls_selected, y_train_cls)
@@ -496,6 +537,7 @@ for k in [3, 5, 11]:
     if acc > best_knn_accuracy:
         best_knn_accuracy = acc
         best_knn = knn_model
+    print(f"n_neighbors={k} -> Accuracy: {acc:.4f}")
 
 # Save best KNN model
 pickle.dump(best_knn, open('saved_models/best_knn.pkl', 'wb'))
@@ -503,6 +545,7 @@ pickle.dump(best_knn, open('saved_models/best_knn.pkl', 'wb'))
 # Train Decision Tree with different depths
 best_dt = None
 best_dt_accuracy = 0
+print("\n--- Decision Tree ---")
 for depth in [3, 5, 10]:
     dt_model = DecisionTreeClassifier(max_depth=depth, random_state=42)
     dt_model.fit(X_train_cls_selected, y_train_cls)
@@ -510,6 +553,7 @@ for depth in [3, 5, 10]:
     if acc > best_dt_accuracy:
         best_dt_accuracy = acc
         best_dt = dt_model
+    print(f"max_depth={depth} -> Accuracy: {acc:.4f}")
 
 # Save best decision tree model
 pickle.dump(best_dt, open('saved_models/best_decision_tree.pkl', 'wb'))
@@ -517,6 +561,7 @@ pickle.dump(best_dt, open('saved_models/best_decision_tree.pkl', 'wb'))
 # Train Random Forest with different estimators
 best_rf_cls = None
 best_rf_cls_accuracy = 0
+print("\n--- Random Forest ---")
 for n in [50, 100, 200]:
     rf_cls_model = RandomForestClassifier(n_estimators=n, random_state=42)
     rf_cls_model.fit(X_train_cls_selected, y_train_cls)
@@ -524,6 +569,7 @@ for n in [50, 100, 200]:
     if acc > best_rf_cls_accuracy:
         best_rf_cls_accuracy = acc
         best_rf_cls = rf_cls_model
+    print(f"n_estimators={n} -> Accuracy: {acc:.4f}")
 
 # Save best random forest classifier model
 pickle.dump(best_rf_cls, open('saved_models/best_random_forest_classifier.pkl', 'wb'))
@@ -552,7 +598,9 @@ stacking_clf = StackingClassifier(
 )
 
 stacking_clf.fit(X_train_cls_selected, y_train_cls)
-
+stack_preds = stacking_clf.predict(X_test_cls_selected)
+print("\nStacking Ensemble Results:")
+print(f"Accuracy: {accuracy_score(y_test_cls, stack_preds):.4f}")
 # Save stacking classifier
 pickle.dump(stacking_clf, open('saved_models/stacking_classifier.pkl', 'wb'))
 
@@ -572,5 +620,8 @@ voting_clf.fit(X_train_cls_selected, y_train_cls)
 
 # Save voting classifier
 pickle.dump(voting_clf, open('saved_models/voting_classifier.pkl', 'wb'))
+voting_preds = voting_clf.predict(X_test_cls_selected)
+print("\nVoting Ensemble (Soft) Results:")
+print(f"Accuracy: {accuracy_score(y_test_cls, voting_preds):.4f}")
 
 print("All preprocessing steps and models have been saved successfully!")
