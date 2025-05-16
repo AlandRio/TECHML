@@ -187,6 +187,7 @@ def run_all_models(final_df):
         X_regress = final_df.drop(['price', 'deal_size'], axis=1, errors='ignore')
         X_class = final_df.drop(['price', 'deal_size'], axis=1, errors='ignore')
         y_regress = final_df['price'] if 'price' in final_df.columns else None
+        y_regress = y_regress.iloc[:,[0]]
         y_class = final_df['deal_size'] if 'deal_size' in final_df.columns else None
         print(f"y_class exists: {y_class is not None}, value counts: {y_class.value_counts(dropna=False) if y_class is not None else 'None'}")
 
@@ -215,13 +216,10 @@ def run_all_models(final_df):
                     X_selected = extra[0].transform(X_selected)
                 pred = transform(model.predict(X_selected))
                 predictions[f'{model_name}_Price'] = pred
-                if y_regress is not None and not y_regress.isna().all():
-                    mse = mean_squared_error(y_regress, pred)
-                    r2 = r2_score(y_regress, pred)
-                    metrics[model_name] = {'MSE': mse, 'R²': r2}
-                    print(f"{model_name}: MSE={mse:.4f}, R²={r2:.4f}")
-                else:
-                    print(f"No valid price ground truth for {model_name}, skipping metrics")
+                mse = mean_squared_error(y_regress, pred)
+                r2 = r2_score(y_regress, pred)
+                metrics[model_name] = {'MSE': mse, 'R²': r2}
+                print(f"{model_name}: MSE={mse:.4f}, R²={r2:.4f}")
             except FileNotFoundError:
                 print(f"Error: Model {model_name}.pkl not found")
             except Exception as e:
