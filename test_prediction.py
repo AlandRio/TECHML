@@ -33,6 +33,8 @@ def load_and_merge_data(acquisitions_file, acquiring_file, acquired_file, founde
 
         if class_flag:
             acquisitions_df['Price'] = np.nan
+        else:
+            acquisitions_df['deal_size'] = np.nan
 
         acquiring_df_cleaned = acquiring_df.copy()
         acquiring_df_cleaned["Acquisitions ID"] = acquiring_df_cleaned["Acquisitions ID"].str.split(",")
@@ -321,9 +323,15 @@ def make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_
 
 
 if __name__ == "__main__":
-    acquisitions_file = "Acquisitions Class.csv"
+    acquisitions_file = "Acquisitions class.csv"
     acquiring_file = "Acquiring Tech Companies.csv"
     acquired_file = "Acquired Tech Companies.csv"
     founders_file = "Founders and Board Members.csv"
-    class_flag = True
-    make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_file,acquisitions_file)
+
+    class_flag = input("Class? (y/n)")
+    if class_flag == 'y':
+        class_flag = True
+        make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_file, acquisitions_file)
+    else:
+        class_flag = False
+        make_predictions(acquisitions_file, acquiring_file, acquired_file, founders_file)
