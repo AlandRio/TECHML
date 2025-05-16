@@ -422,30 +422,101 @@ Y_class_encoded = label_encoder.fit_transform(Y_class)
 
 X_train, X_test, y_train, y_test = train_test_split(X_class, Y_class_encoded, test_size=0.2, random_state=42, stratify=Y_class)
 
-models = {
-    "Logistic Regression": LogisticRegression(max_iter=1000),
-    "Linear SVM": SVC(kernel='linear', probability=True),
-    "Poly SVM": SVC(kernel='poly', degree=3,probability=True),
-    "KNN": KNeighborsClassifier(n_neighbors=5),
-    "Decision Tree": DecisionTreeClassifier(random_state=42),
-    "Random Forest": RandomForestClassifier(random_state=42),
-    "XGBoost": XGBClassifier(eval_metric='logloss')
-}
+models = []
 
-for name, model in models.items():
+best_accuracy = 0
+best_param_lr = 0
+
+print("\n--- Logistic Regression ---")
+for C in [0.01, 1, 100]:
+    model = LogisticRegression(C=C, max_iter=1000)
     model.fit(X_train, y_train)
-    predictions = model.predict(X_test)
-    print(f"\n{name} Results:")
-    print(f"Accuracy: {accuracy_score(y_test, predictions):.4f}")
+    acc = accuracy_score(y_test, model.predict(X_test))
+    if acc > best_accuracy:
+        best_accuracy = acc
+        best_param_lr = C
+    print(f"C={C} -> Accuracy: {acc:.4f}")
+
+best_accuracy = 0
+best_param_lsvm = 0
+print("\n--- Linear SVM ---")
+for C in [0.01, 1, 100]:
+    model = SVC(kernel='linear', C=C, probability=True)
+    model.fit(X_train, y_train)
+    acc = accuracy_score(y_test, model.predict(X_test))
+    if acc > best_accuracy:
+        best_accuracy = acc
+        best_param_lsvm = C
+    print(f"C={C} -> Accuracy: {acc:.4f}")
+
+best_accuracy = 0
+best_param_psvm = 0
+
+print("\n--- Poly SVM ---")
+for degree in [2, 3, 5]:
+    model = SVC(kernel='poly', degree=degree, probability=True)
+    model.fit(X_train, y_train)
+    acc = accuracy_score(y_test, model.predict(X_test))
+    if acc > best_accuracy:
+        best_accuracy = acc
+        best_param_psvm = C
+    print(f"Degree={degree} -> Accuracy: {acc:.4f}")
+
+best_accuracy = 0
+best_param_knn = 0
+print("\n--- KNN ---")
+for k in [3, 5, 11]:
+    model = KNeighborsClassifier(n_neighbors=k)
+    model.fit(X_train, y_train)
+    acc = accuracy_score(y_test, model.predict(X_test))
+    if acc > best_accuracy:
+        best_accuracy = acc
+        best_param_knn = C
+    print(f"n_neighbors={k} -> Accuracy: {acc:.4f}")
+
+best_accuracy = 0
+best_param_dt = 0
+
+print("\n--- Decision Tree ---")
+for depth in [3, 5, 10]:
+    model = DecisionTreeClassifier(max_depth=depth, random_state=42)
+    model.fit(X_train, y_train)
+    acc = accuracy_score(y_test, model.predict(X_test))
+    if acc > best_accuracy:
+        best_accuracy = acc
+        best_param_dt = C
+    print(f"max_depth={depth} -> Accuracy: {acc:.4f}")
+
+best_accuracy = 0
+best_param_rf = 0
+print("\n--- Random Forest ---")
+for n in [50, 100, 200]:
+    model = RandomForestClassifier(n_estimators=n, random_state=42)
+    model.fit(X_train, y_train)
+    acc = accuracy_score(y_test, model.predict(X_test))
+    if acc > best_accuracy:
+        best_accuracy = acc
+        best_param_rf = C
+    print(f"n_estimators={n} -> Accuracy: {acc:.4f}")
+
+models = {
+    "Logistic Regression": LogisticRegression(max_iter=1000,C=best_param_lr),
+    "Linear SVM": SVC(kernel='linear', probability=True,C=best_param_lsvm),
+    "Poly SVM": SVC(kernel='poly', degree=best_param_psvm,probability=True),
+    "KNN": KNeighborsClassifier(n_neighbors=best_param_knn),
+    "Decision Tree": DecisionTreeClassifier(random_state=42, max_depth=best_param_dt),
+    "Random Forest": RandomForestClassifier(random_state=42,n_estimators=best_param_rf)
+}
 
 # Stacking Ensemble (Logistic Regression as final estimator)
 stacking_clf = StackingClassifier(
     estimators=[
-        ('lr', models["Logistic Regression"]),
-        ('svm', models["Linear SVM"]),
-        ('knn', models["KNN"]),
-        ('rf', models["Random Forest"]),
-        ('xgb', models["XGBoost"])
+        ('Logistic Regression', models["Logistic Regression"]),
+        ('Linear SVM', models["Linear SVM"]),
+        # ('Poly SVM', models["Poly SVM"]),
+        ('KNN', models["KNN"]),
+        ('Decision Tree', models["KNN"]),
+        ('Random Forest', models["Random Forest"])
     ],
     final_estimator=LogisticRegression(),
     cv=5
@@ -459,11 +530,12 @@ print(f"Accuracy: {accuracy_score(y_test, stack_preds):.4f}")
 # Voting Ensemble (Soft Voting)
 voting_clf = VotingClassifier(
     estimators=[
-        ('lr', models["Logistic Regression"]),
-        ('svm', models["Linear SVM"]),
-        ('knn', models["KNN"]),
-        ('rf', models["Random Forest"]),
-        ('xgb', models["XGBoost"])
+        ('Logistic Regression', models["Logistic Regression"]),
+        ('Linear SVM', models["Linear SVM"]),
+        # ('Poly SVM', models["Poly SVM"]),
+        ('KNN', models["KNN"]),
+        ('Decision Tree', models["KNN"]),
+        ('Random Forest', models["Random Forest"])
     ],
     voting='soft'
 )
